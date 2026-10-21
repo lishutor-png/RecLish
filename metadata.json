@@ -1,0 +1,6 @@
+{
+  "name": "RecLish",
+  "description": "RecLish - Aplikasi perekam suara dari Google Chrome & browser dengan floating overlay controller, rekaman latar belakang, format MP3, dan manajemen file.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

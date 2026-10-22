@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,17 +25,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.HelpOutline
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RocketLaunch
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -79,6 +81,7 @@ fun FloatingSettingsScreen(
 ) {
     val context = LocalContext.current
     val isOverlayActive by viewModel.isOverlayActive.collectAsStateWithLifecycle()
+    val isMediaProjectionReady by viewModel.isMediaProjectionReady.collectAsStateWithLifecycle()
     val selectedFormat by viewModel.selectedFormat.collectAsStateWithLifecycle()
     val selectedSource by viewModel.selectedSource.collectAsStateWithLifecycle()
     val hasOverlayPermission = viewModel.hasOverlayPermission()
@@ -91,23 +94,206 @@ fun FloatingSettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // HEADER TITLE
+        // TOP HEADER
         Column {
-            Text(
-                text = "Pengaturan & Floating Mode",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = StudioTextPrimary
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = StudioRecordRed,
+                    modifier = Modifier.size(10.dp)
+                ) {}
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Mode Rekam Google Chrome",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = StudioTextPrimary
+                )
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Merekam suara di atas Chrome / browser lain di latar belakang",
+                text = "Merekam audio tab browser secara otomatis di latar belakang dengan kontrol melayang (bubble)",
                 fontSize = 12.sp,
                 color = StudioTextSecondary
             )
         }
 
-        // 1. FLOATING OVERLAY TOGGLE CARD ("Berjalan di atas aplikasi lain")
+        // 1. HERO 1-TAP CHROME LAUNCHER & PERMISSION CHECKLIST CARD
+        Card(
+            colors = CardDefaults.cardColors(containerColor = StudioDarkSurface),
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.5.dp, StudioPrimary.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
+                .testTag("card_chrome_hero")
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = StudioRecordRed.copy(alpha = 0.15f),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.RocketLaunch, contentDescription = null, tint = StudioRecordRed, modifier = Modifier.size(24.dp))
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Mulai Cepat: Rekam di Chrome",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = StudioTextPrimary
+                        )
+                        Text(
+                            text = "Buka Google Chrome dengan bubble pengontrol siap pakai",
+                            fontSize = 11.5.sp,
+                            color = StudioTextSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Readiness Checklist
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(StudioDarkCard)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Item 1: Audio Capture System Permission
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { if (!isMediaProjectionReady) onRequestMediaProjection() },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isMediaProjectionReady) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = if (isMediaProjectionReady) StudioSuccessGreen else StudioWarningAmber,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "1. Tangkap Audio Tab Browser",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = StudioTextPrimary
+                            )
+                            Text(
+                                text = if (isMediaProjectionReady) "Suara tab akan terekam jernih tanpa mic" else "Ketuk di sini untuk aktifkan izin sistem",
+                                fontSize = 10.5.sp,
+                                color = if (isMediaProjectionReady) StudioSuccessGreen else StudioWarningAmber
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isMediaProjectionReady) StudioSuccessGreen.copy(alpha = 0.2f) else StudioWarningAmber.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = if (isMediaProjectionReady) "Siap" else "Aktifkan",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isMediaProjectionReady) StudioSuccessGreen else StudioWarningAmber,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    // Item 2: Floating Overlay Permission
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                if (!hasOverlayPermission) {
+                                    val intent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
+                                    context.startActivity(intent)
+                                } else {
+                                    viewModel.toggleFloatingOverlay()
+                                }
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (hasOverlayPermission) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = if (hasOverlayPermission) StudioSuccessGreen else StudioWarningAmber,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "2. Bubble di Atas Aplikasi Lain",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = StudioTextPrimary
+                            )
+                            Text(
+                                text = if (hasOverlayPermission) "Bubble dapat mengapung di atas Chrome" else "Ketuk untuk izinkan overlay di pengaturan HP",
+                                fontSize = 10.5.sp,
+                                color = if (hasOverlayPermission) StudioSuccessGreen else StudioWarningAmber
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (hasOverlayPermission) StudioSuccessGreen.copy(alpha = 0.2f) else StudioWarningAmber.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = if (hasOverlayPermission) "Siap" else "Aktifkan",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (hasOverlayPermission) StudioSuccessGreen else StudioWarningAmber,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Giant Launch Button
+                Button(
+                    onClick = {
+                        viewModel.launchChromeAndFloating(context, onRequestMediaProjection)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StudioRecordRed),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("btn_launch_chrome_primary")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Buka Google Chrome & Mulai Rekam",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+
+        // 2. FLOATING BUBBLE STATUS & MANUAL SWITCH
         Card(
             colors = CardDefaults.cardColors(containerColor = StudioDarkSurface),
             shape = RoundedCornerShape(16.dp),
@@ -138,14 +324,15 @@ fun FloatingSettingsScreen(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Bubble Mengambang",
+                            text = "Status Bubble Mengambang",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = StudioTextPrimary
                         )
                         Text(
-                            text = if (isOverlayActive) "Aktif di atas semua aplikasi" else "Tidak aktif",
+                            text = if (isOverlayActive) "🟢 Aktif di layar HP" else "⚪ Nonaktif",
                             fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
                             color = if (isOverlayActive) StudioSuccessGreen else StudioTextMuted
                         )
                     }
@@ -157,7 +344,7 @@ fun FloatingSettingsScreen(
                                 val intent = Intent(
                                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                     Uri.parse("package:${context.packageName}")
-                                )
+                                ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
                                 context.startActivity(intent)
                             } else {
                                 viewModel.toggleFloatingOverlay()
@@ -173,67 +360,47 @@ fun FloatingSettingsScreen(
                     )
                 }
 
+                // Visual Preview of the Bubble
                 Spacer(modifier = Modifier.height(12.dp))
-
-                // Permission Warning or Success
-                if (!hasOverlayPermission) {
-                    Surface(
-                        color = StudioWarningAmber.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                Surface(
+                    color = Color(0xFF0F172A),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        // Mini preview bubble pill
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color(0xFF1E293B),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, StudioPrimary),
+                            modifier = Modifier.padding(end = 10.dp)
                         ) {
-                            Icon(Icons.Default.Security, contentDescription = null, tint = StudioWarningAmber, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Izin 'Tampilkan di atas aplikasi lain' diperlukan",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = StudioWarningAmber
-                                )
-                                Text(
-                                    text = "Ketuk untuk membuka pengaturan Android dan aktifkan izin.",
-                                    fontSize = 11.sp,
-                                    color = StudioTextSecondary
-                                )
-                            }
-                            Button(
-                                onClick = {
-                                    val intent = Intent(
-                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                        Uri.parse("package:${context.packageName}")
-                                    )
-                                    context.startActivity(intent)
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = StudioWarningAmber),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(30.dp)
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Buka", fontSize = 11.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
+                                Surface(shape = CircleShape, color = StudioRecordRed, modifier = Modifier.size(8.dp)) {}
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("00:42", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("🔊 Rec", fontSize = 9.sp, color = StudioPrimary)
                             }
                         }
-                    }
-                } else {
-                    Surface(
-                        color = StudioSuccessGreen.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = StudioSuccessGreen, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Izin overlay aktif. Bubble dapat digeser ke posisi mana saja.",
+                                text = "Tampilan Bubble di Layar",
                                 fontSize = 11.sp,
-                                color = StudioSuccessGreen
+                                fontWeight = FontWeight.Bold,
+                                color = StudioTextPrimary
+                            )
+                            Text(
+                                text = "Bisa digeser ke mana saja. Ketuk bubble untuk Jeda atau Simpan rekaman MP3.",
+                                fontSize = 10.sp,
+                                color = StudioTextSecondary
                             )
                         }
                     }
@@ -241,7 +408,7 @@ fun FloatingSettingsScreen(
             }
         }
 
-        // 2. AUDIO SOURCE SELECTOR CARD
+        // 3. AUDIO SOURCE SELECTION (TAB BROWSER vs MIC)
         Card(
             colors = CardDefaults.cardColors(containerColor = StudioDarkSurface),
             shape = RoundedCornerShape(16.dp),
@@ -255,27 +422,27 @@ fun FloatingSettingsScreen(
                     .padding(16.dp)
             ) {
                 Text(
-                    text = "Sumber Audio Perekaman",
+                    text = "Pilihan Sumber Suara",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = StudioTextPrimary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Pilih dari mana suara akan direkam saat browsing:",
+                    text = "Tentukan sumber audio sebelum merekam:",
                     fontSize = 12.sp,
                     color = StudioTextSecondary
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Option 1: Browser Internal Audio Playback Capture
+                // Option 1: Browser Tab Audio (Internal Capture)
                 val isInternal = selectedSource == AudioCaptureSource.BROWSER_INTERNAL
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = if (isInternal) StudioPrimary.copy(alpha = 0.12f) else StudioDarkCard,
                     border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
+                        1.5.dp,
                         if (isInternal) StudioPrimary else Color(0xFF334155)
                     ),
                     modifier = Modifier
@@ -283,7 +450,7 @@ fun FloatingSettingsScreen(
                         .clip(RoundedCornerShape(12.dp))
                         .clickable {
                             viewModel.setSource(AudioCaptureSource.BROWSER_INTERNAL)
-                            onRequestMediaProjection()
+                            if (!isMediaProjectionReady) onRequestMediaProjection()
                         }
                         .testTag("source_browser_internal")
                 ) {
@@ -291,28 +458,36 @@ fun FloatingSettingsScreen(
                         modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.VolumeUp,
-                            contentDescription = null,
-                            tint = if (isInternal) StudioPrimary else StudioTextMuted,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isInternal) StudioPrimary.copy(alpha = 0.2f) else Color(0xFF1E293B),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = null,
+                                    tint = if (isInternal) StudioPrimary else StudioTextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "Audio Tab Browser (Internal)",
+                                    text = "🔊 Audio Tab Browser (Jernih)",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isInternal) StudioPrimary else StudioTextPrimary
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Surface(
-                                    color = StudioSuccessGreen.copy(alpha = 0.2f),
-                                    shape = RoundedCornerShape(4.dp)
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = StudioSuccessGreen.copy(alpha = 0.2f)
                                 ) {
                                     Text(
-                                        text = "Jernih Tanpa Noise",
+                                        text = "Rekomendasi",
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = StudioSuccessGreen,
@@ -321,7 +496,7 @@ fun FloatingSettingsScreen(
                                 }
                             }
                             Text(
-                                text = "Menangkap suara langsung dari sistem Android tanpa suara bising ruangan.",
+                                text = "Menangkap suara langsung dari sistem Android. Hasil rekaman murni suara video/musik tanpa suara napas atau kebisingan ruangan.",
                                 fontSize = 11.sp,
                                 color = StudioTextSecondary
                             )
@@ -331,14 +506,14 @@ fun FloatingSettingsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Option 2: Microphone Capture
+                // Option 2: Microphone
                 val isMic = selectedSource == AudioCaptureSource.MICROPHONE
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (isMic) StudioPrimary.copy(alpha = 0.12f) else StudioDarkCard,
+                    color = if (isMic) StudioWarningAmber.copy(alpha = 0.12f) else StudioDarkCard,
                     border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isMic) StudioPrimary else Color(0xFF334155)
+                        1.5.dp,
+                        if (isMic) StudioWarningAmber else Color(0xFF334155)
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -350,22 +525,30 @@ fun FloatingSettingsScreen(
                         modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.Mic,
-                            contentDescription = null,
-                            tint = if (isMic) StudioPrimary else StudioTextMuted,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isMic) StudioWarningAmber.copy(alpha = 0.2f) else Color(0xFF1E293B),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Mic,
+                                    contentDescription = null,
+                                    tint = if (isMic) StudioWarningAmber else StudioTextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Mikrofon (Speaker & Suara Luar)",
+                                text = "🎙 Mikrofon HP",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isMic) StudioPrimary else StudioTextPrimary
+                                color = if (isMic) StudioWarningAmber else StudioTextPrimary
                             )
                             Text(
-                                text = "Merekam suara speaker HP serta komentar suara pengguna.",
+                                text = "Merekam suara yang keluar dari speaker luar dan suara Anda.",
                                 fontSize = 11.sp,
                                 color = StudioTextSecondary
                             )
@@ -375,7 +558,7 @@ fun FloatingSettingsScreen(
             }
         }
 
-        // 3. AUDIO FORMAT & QUALITY CARD
+        // 4. FORMAT SELECTOR (MP3, WAV, M4A)
         Card(
             colors = CardDefaults.cardColors(containerColor = StudioDarkSurface),
             shape = RoundedCornerShape(16.dp),
@@ -389,14 +572,14 @@ fun FloatingSettingsScreen(
                     .padding(16.dp)
             ) {
                 Text(
-                    text = "Format & Kualitas Audio",
+                    text = "Format File Penyimpanan",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = StudioTextPrimary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Dukungan format file audio yang disimpan ke memori HP:",
+                    text = "File disimpan langsung ke memori internal HP:",
                     fontSize = 12.sp,
                     color = StudioTextSecondary
                 )
@@ -408,16 +591,16 @@ fun FloatingSettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
-                        Triple("MP3", "Standar & Ringan", "Kompatibel semua pemutar"),
+                        Triple("MP3", "Rekomendasi", "Paling kompatibel & ringan"),
                         Triple("WAV", "Studio PCM", "Kualitas tanpa kompresi"),
-                        Triple("M4A", "High Efficiency", "Format AAC modern")
-                    ).forEach { (fmt, sub, desc) ->
+                        Triple("M4A", "AAC Modern", "Efisien & jernih")
+                    ).forEach { (fmt, tag, desc) ->
                         val isSelected = selectedFormat == fmt
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = if (isSelected) StudioPrimary.copy(alpha = 0.15f) else StudioDarkCard,
                             border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
+                                1.5.dp,
                                 if (isSelected) StudioPrimary else Color(0xFF334155)
                             ),
                             modifier = Modifier
@@ -437,8 +620,9 @@ fun FloatingSettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = sub,
-                                    fontSize = 10.sp,
+                                    text = tag,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
                                     color = if (isSelected) StudioPrimary else StudioTextMuted
                                 )
                             }
@@ -448,89 +632,9 @@ fun FloatingSettingsScreen(
             }
         }
 
-        // 4. STEP-BY-STEP TUTORIAL CARD
+        // 5. STORAGE FOLDER LOCATION BANNER
         Card(
-            colors = CardDefaults.cardColors(containerColor = StudioDarkSurface),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Color(0xFF26334D), RoundedCornerShape(16.dp))
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.HelpOutline, contentDescription = null, tint = StudioPrimary, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Cara Merekam Suara dari Chrome / Browser",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = StudioTextPrimary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                listOf(
-                    "1" to "Nyalakan sakelar 'Bubble Mengambang' di atas.",
-                    "2" to "Buka Google Chrome atau browser favorit Anda.",
-                    "3" to "Buka tab web yang memutar musik, podcast, atau audio.",
-                    "4" to "Ketuk tombol 'Mulai' pada bubble mengambang di pojok layar.",
-                    "5" to "Aplikasi merekam di latar belakang tanpa mengganggu browsing Anda.",
-                    "6" to "Ketuk 'Simpan' saat selesai. Hasil rekaman MP3 otomatis tersimpan di memori HP Anda!"
-                ).forEach { (step, text) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = StudioSecondary.copy(alpha = 0.2f),
-                            modifier = Modifier.size(20.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(text = step, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = StudioSecondary)
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(text = text, fontSize = 12.sp, color = StudioTextSecondary, modifier = Modifier.weight(1f))
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Button(
-                    onClick = {
-                        if (!isOverlayActive && hasOverlayPermission) {
-                            viewModel.toggleFloatingOverlay()
-                        }
-                        val chromeIntent = context.packageManager.getLaunchIntentForPackage("com.android.chrome")
-                            ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))
-                        context.startActivity(chromeIntent)
-                        viewModel.showSnack("Membuka Google Chrome dengan RecLish Overlay!")
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = StudioRecordRed),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .testTag("btn_launch_chrome")
-                ) {
-                    Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Buka Google Chrome Sekarang", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        // 5. STORAGE LOCATION INFO
-        Card(
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF162035)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31)),
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -544,18 +648,18 @@ fun FloatingSettingsScreen(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Penyimpanan di Memori HP",
+                        text = "Lokasi File di Memori HP",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = StudioTextPrimary
                     )
                     Text(
-                        text = "Penyimpanan Internal/Music/BrowserRecordings",
+                        text = "Penyimpanan Internal / Music / BrowserRecordings",
                         fontSize = 11.sp,
                         color = StudioTextSecondary
                     )
                     Text(
-                        text = "File dapat diputar di pemutar musik mana saja & dapat dibagikan langsung.",
+                        text = "Dapat diputar langsung di pemutar musik apa saja atau dikirim via WhatsApp.",
                         fontSize = 10.sp,
                         color = StudioTextMuted
                     )
@@ -563,6 +667,6 @@ fun FloatingSettingsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
     }
 }

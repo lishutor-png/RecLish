@@ -9,6 +9,10 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,8 +36,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -63,6 +72,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -72,17 +82,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.audio.AudioCaptureSource
 import com.example.audio.RecordingStatus
 import com.example.ui.components.AudioWaveformVisualizer
 import com.example.ui.theme.StudioDarkCard
 import com.example.ui.theme.StudioDarkSurface
 import com.example.ui.theme.StudioPrimary
 import com.example.ui.theme.StudioRecordRed
+import com.example.ui.theme.StudioSecondary
 import com.example.ui.theme.StudioSuccessGreen
 import com.example.ui.theme.StudioTextMuted
 import com.example.ui.theme.StudioTextPrimary
 import com.example.ui.theme.StudioTextSecondary
 import com.example.ui.theme.StudioWarningAmber
+import com.example.ui.viewmodel.AppScreen
 import com.example.ui.viewmodel.MainViewModel
 import java.util.Locale
 
@@ -90,30 +103,33 @@ import java.util.Locale
 @Composable
 fun StudioBrowserScreen(
     viewModel: MainViewModel,
+    onRequestMediaProjection: () -> Unit,
     onRequestOverlay: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val recorderState by viewModel.recorderState.collectAsStateWithLifecycle()
     val selectedFormat by viewModel.selectedFormat.collectAsStateWithLifecycle()
+    val selectedSource by viewModel.selectedSource.collectAsStateWithLifecycle()
+    val isMediaProjectionReady by viewModel.isMediaProjectionReady.collectAsStateWithLifecycle()
     val isOverlayActive by viewModel.isOverlayActive.collectAsStateWithLifecycle()
 
     var urlInput by remember { mutableStateOf("https://www.soundhelix.com/audio-examples") }
     var currentUrl by remember { mutableStateOf("https://www.soundhelix.com/audio-examples") }
-    var pageTitle by remember { mutableStateOf("Audio Browser Studio") }
+    var pageTitle by remember { mutableStateOf("RecLish Web Studio") }
     var webProgress by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-    val context = androidx.compose.ui.platform.LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
     val bookmarks = listOf(
-        "Google Search" to "https://www.google.com",
-        "YouTube Web" to "https://m.youtube.com",
-        "SoundHelix (Audio)" to "https://www.soundhelix.com/audio-examples",
-        "FreeMusicArchive" to "https://freemusicarchive.org",
-        "SoundCloud" to "https://m.soundcloud.com",
-        "Radio Garden" to "https://radio.garden"
+        "🎵 SoundHelix (Audio)" to "https://www.soundhelix.com/audio-examples",
+        "🌐 Google Search" to "https://www.google.com",
+        "▶️ YouTube Web" to "https://m.youtube.com",
+        "🎼 FreeMusicArchive" to "https://freemusicarchive.org",
+        "☁️ SoundCloud" to "https://m.soundcloud.com",
+        "📻 Radio Garden" to "https://radio.garden"
     )
 
     Column(
@@ -130,8 +146,67 @@ fun StudioBrowserScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
+                // Header Row: App Identity + Quick Google Chrome Shortcut
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = StudioRecordRed,
+                            modifier = Modifier.size(14.dp)
+                        ) {}
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "RecLish",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = StudioTextPrimary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = StudioPrimary.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = "Audio Tab Studio",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = StudioPrimary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    // 1-Tap Launch Google Chrome Button
+                    Button(
+                        onClick = {
+                            viewModel.launchChromeAndFloating(context, onRequestMediaProjection)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = StudioRecordRed.copy(alpha = 0.15f),
+                            contentColor = StudioRecordRed
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier
+                            .height(28.dp)
+                            .border(1.dp, StudioRecordRed.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                            .testTag("btn_quick_chrome")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Buka di Chrome", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Address Input Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -165,11 +240,11 @@ fun StudioBrowserScreen(
                         onValueChange = { urlInput = it },
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
+                            .height(44.dp)
                             .padding(horizontal = 4.dp)
                             .testTag("web_url_input"),
                         singleLine = true,
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = StudioDarkCard,
                             unfocusedContainerColor = StudioDarkCard,
@@ -179,7 +254,7 @@ fun StudioBrowserScreen(
                             unfocusedTextColor = StudioTextPrimary
                         ),
                         placeholder = {
-                            Text("Ketik URL atau cari web...", fontSize = 12.sp, color = StudioTextMuted)
+                            Text("Ketik URL atau cari audio...", fontSize = 12.sp, color = StudioTextMuted)
                         },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                         keyboardActions = KeyboardActions(onGo = {
@@ -206,9 +281,9 @@ fun StudioBrowserScreen(
                                     currentUrl = destination
                                     webViewRef?.loadUrl(destination)
                                 },
-                                modifier = Modifier.size(32.dp).testTag("web_btn_go")
+                                modifier = Modifier.size(28.dp).testTag("web_btn_go")
                             ) {
-                                Icon(Icons.Default.Search, contentDescription = "Buka", tint = StudioPrimary)
+                                Icon(Icons.Default.Search, contentDescription = "Buka", tint = StudioPrimary, modifier = Modifier.size(18.dp))
                             }
                         }
                     )
@@ -217,7 +292,7 @@ fun StudioBrowserScreen(
                         onClick = { webViewRef?.reload() },
                         modifier = Modifier.size(36.dp).testTag("web_btn_reload")
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Muat Ulang", tint = StudioPrimary)
+                        Icon(Icons.Default.Refresh, contentDescription = "Muat Ulang", tint = StudioPrimary, modifier = Modifier.size(20.dp))
                     }
                 }
 
@@ -227,47 +302,21 @@ fun StudioBrowserScreen(
                         progress = { webProgress / 100f },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(3.dp)
-                            .padding(top = 4.dp),
+                            .height(2.dp)
+                            .padding(top = 2.dp),
                         color = StudioPrimary,
                         trackColor = Color(0xFF1E293B)
                     )
                 }
 
-                // Preset Audio Bookmarks chips
+                // Preset Bookmarks Chips
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 6.dp)
+                        .padding(top = 4.dp)
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Google Chrome App Shortcut Chip
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF1E293B),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, StudioRecordRed),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                if (!isOverlayActive && viewModel.hasOverlayPermission()) {
-                                    viewModel.toggleFloatingOverlay()
-                                }
-                                val intent = context.packageManager.getLaunchIntentForPackage("com.android.chrome")
-                                    ?: android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com"))
-                                context.startActivity(intent)
-                                viewModel.showSnack("Membuka Google Chrome dengan RecLish!")
-                            }
-                            .testTag("chip_open_chrome")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                        ) {
-                            Text("🌐 Buka Google Chrome", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StudioRecordRed)
-                        }
-                    }
-
                     bookmarks.forEach { (name, target) ->
                         FilterChip(
                             selected = currentUrl == target,
@@ -352,7 +401,7 @@ fun StudioBrowserScreen(
             )
         }
 
-        // PERSISTENT RECORDING CONTROL DOCK
+        // PERSISTENT RECORDING CONTROL DOCK (REVAMPED UI/UX)
         Card(
             colors = CardDefaults.cardColors(containerColor = StudioDarkSurface),
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -363,65 +412,141 @@ fun StudioBrowserScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                // Dock Header: Status & Duration & Floating Overlay Launcher
+                // 1. SOURCE SELECTOR TOGGLE (Tab Browser Internal vs Microphone)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(StudioDarkCard)
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val statusDotColor = when (recorderState.status) {
-                            RecordingStatus.RECORDING -> StudioRecordRed
-                            RecordingStatus.PAUSED -> StudioWarningAmber
-                            else -> Color(0xFF64748B)
+                    val isInternal = selectedSource == AudioCaptureSource.BROWSER_INTERNAL
+                    Surface(
+                        shape = RoundedCornerShape(9.dp),
+                        color = if (isInternal) StudioPrimary.copy(alpha = 0.2f) else Color.Transparent,
+                        border = if (isInternal) androidx.compose.foundation.BorderStroke(1.dp, StudioPrimary) else null,
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .clip(RoundedCornerShape(9.dp))
+                            .clickable {
+                                viewModel.setSource(AudioCaptureSource.BROWSER_INTERNAL)
+                                if (!isMediaProjectionReady) onRequestMediaProjection()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = null,
+                                tint = if (isInternal) StudioPrimary else StudioTextMuted,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "🔊 Audio Browser (Jernih)",
+                                fontSize = 11.sp,
+                                fontWeight = if (isInternal) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isInternal) StudioPrimary else StudioTextSecondary
+                            )
                         }
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(statusDotColor)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        val statusLabel = when (recorderState.status) {
-                            RecordingStatus.RECORDING -> "Merekam Audio Web"
-                            RecordingStatus.PAUSED -> "Perekaman Dijeda"
-                            else -> "Siap Merekam Suara"
-                        }
-                        Text(
-                            text = statusLabel,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = StudioTextPrimary
-                        )
                     }
 
-                    // Floating overlay toggle button
-                    Button(
-                        onClick = onRequestOverlay,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isOverlayActive) StudioPrimary.copy(alpha = 0.2f) else StudioDarkCard,
-                            contentColor = if (isOverlayActive) StudioPrimary else StudioTextSecondary
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp).testTag("btn_toggle_floating")
+                    val isMic = selectedSource == AudioCaptureSource.MICROPHONE
+                    Surface(
+                        shape = RoundedCornerShape(9.dp),
+                        color = if (isMic) StudioWarningAmber.copy(alpha = 0.2f) else Color.Transparent,
+                        border = if (isMic) androidx.compose.foundation.BorderStroke(1.dp, StudioWarningAmber) else null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(9.dp))
+                            .clickable { viewModel.setSource(AudioCaptureSource.MICROPHONE) }
                     ) {
-                        Icon(
-                            Icons.Default.Layers,
-                            contentDescription = "Floating Overlay",
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (isOverlayActive) "Overlay Aktif" else "Buka di Atas Chrome",
-                            fontSize = 11.sp
-                        )
+                        Row(
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Mic,
+                                contentDescription = null,
+                                tint = if (isMic) StudioWarningAmber else StudioTextMuted,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "🎙 Mikrofon",
+                                fontSize = 11.sp,
+                                fontWeight = if (isMic) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isMic) StudioWarningAmber else StudioTextSecondary
+                            )
+                        }
                     }
                 }
 
-                // Waveform visualizer & Timer display
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // 2. STATUS & PERMISSION BANNER
+                if (selectedSource == AudioCaptureSource.BROWSER_INTERNAL) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isMediaProjectionReady) StudioSuccessGreen.copy(alpha = 0.12f) else StudioWarningAmber.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isMediaProjectionReady) StudioSuccessGreen.copy(alpha = 0.4f) else StudioWarningAmber
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (!isMediaProjectionReady) onRequestMediaProjection()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isMediaProjectionReady) Icons.Default.CheckCircle else Icons.AutoMirrored.Filled.HelpOutline,
+                                contentDescription = null,
+                                tint = if (isMediaProjectionReady) StudioSuccessGreen else StudioWarningAmber,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isMediaProjectionReady)
+                                    "Audio browser siap: Merekam langsung audio tab tanpa suara luar/mic."
+                                else
+                                    "⚠️ Izin audio sistem belum aktif. Ketuk di sini untuk aktifkan!",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isMediaProjectionReady) StudioSuccessGreen else StudioWarningAmber,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (!isMediaProjectionReady) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = StudioWarningAmber,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "Aktifkan",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0F172A),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. WAVEFORM VISUALIZER & DURATION DISPLAY
                 val totalSecs = recorderState.durationMs / 1000
                 val mins = totalSecs / 60
                 val secs = totalSecs % 60
@@ -430,7 +555,7 @@ fun StudioBrowserScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AudioWaveformVisualizer(
@@ -440,45 +565,55 @@ fun StudioBrowserScreen(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
-                    Text(
-                        text = formattedTime,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        color = if (recorderState.status == RecordingStatus.RECORDING) StudioRecordRed else StudioTextPrimary
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF1E293B),
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = formattedTime,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            color = if (recorderState.status == RecordingStatus.RECORDING) StudioRecordRed else StudioTextPrimary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
                 }
 
-                // Format & Action Controls
+                // 4. ACTION BAR (Format Selection + Big Record Button)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Format selector tags
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Audio Format selector chips
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         listOf("MP3", "WAV", "M4A").forEach { fmt ->
                             val isSelected = selectedFormat == fmt
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = if (isSelected) StudioPrimary else StudioDarkCard,
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .testTag("chip_format_$fmt"),
-                                onClick = {
-                                    if (recorderState.status == RecordingStatus.IDLE) {
-                                        viewModel.setFormat(fmt)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        if (recorderState.status == RecordingStatus.IDLE) {
+                                            viewModel.setFormat(fmt)
+                                        }
                                     }
-                                }
+                                    .testTag("chip_format_$fmt")
                             ) {
                                 Text(
                                     text = fmt,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isSelected) Color(0xFF0F172A) else StudioTextSecondary,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
                                 )
                             }
                         }
@@ -488,10 +623,18 @@ fun StudioBrowserScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (recorderState.status == RecordingStatus.IDLE) {
                             Button(
-                                onClick = { viewModel.startRecording() },
+                                onClick = {
+                                    if (selectedSource == AudioCaptureSource.BROWSER_INTERNAL && !isMediaProjectionReady) {
+                                        onRequestMediaProjection()
+                                    } else {
+                                        viewModel.startRecording()
+                                    }
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = StudioRecordRed),
                                 shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.height(40.dp).testTag("btn_start_record")
+                                modifier = Modifier
+                                    .height(42.dp)
+                                    .testTag("btn_start_record")
                             ) {
                                 Icon(
                                     Icons.Default.FiberManualRecord,
@@ -499,7 +642,11 @@ fun StudioBrowserScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Rekam Suara", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = if (selectedSource == AudioCaptureSource.BROWSER_INTERNAL) "Rekam Audio Tab" else "Rekam Mikrofon",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         } else {
                             // Pause / Resume Button
@@ -514,18 +661,18 @@ fun StudioBrowserScreen(
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (recorderState.status == RecordingStatus.RECORDING) StudioWarningAmber else StudioSuccessGreen
                                 ),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.height(40.dp).testTag("btn_pause_resume")
                             ) {
                                 Icon(
                                     imageVector = if (recorderState.status == RecordingStatus.RECORDING) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = if (recorderState.status == RecordingStatus.RECORDING) "Jeda" else "Lanjut",
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = if (recorderState.status == RecordingStatus.RECORDING) "Jeda" else "Lanjut",
-                                    fontSize = 12.sp
+                                    fontSize = 11.sp
                                 )
                             }
 
@@ -533,12 +680,12 @@ fun StudioBrowserScreen(
                             Button(
                                 onClick = { viewModel.stopRecording() },
                                 colors = ButtonDefaults.buttonColors(containerColor = StudioRecordRed),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.height(40.dp).testTag("btn_stop_save")
                             ) {
-                                Icon(Icons.Default.Stop, contentDescription = "Simpan", modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Stop, contentDescription = "Simpan", modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Simpan", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Simpan MP3", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

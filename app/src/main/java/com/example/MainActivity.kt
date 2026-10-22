@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Layers
@@ -38,7 +39,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -49,11 +52,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.audio.AudioRecordManager
+import com.example.service.AudioRecorderService
 import com.example.ui.screens.FloatingSettingsScreen
 import com.example.ui.screens.RecordingsScreen
 import com.example.ui.screens.StudioBrowserScreen
-import com.example.ui.theme.StudioDarkBackground
 import com.example.ui.theme.StudioDarkSurface
 import com.example.ui.theme.StudioPrimary
 import com.example.ui.theme.StudioTextMuted
@@ -64,48 +66,91 @@ import com.example.ui.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        const val ACTION_REQUEST_AUDIO_CAPTURE = "com.example.ACTION_REQUEST_AUDIO_CAPTURE"
+    }
+
+    private var viewModelRef: MainViewModel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        val checkCaptureRequest = intent?.action == ACTION_REQUEST_AUDIO_CAPTURE
+
         setContent {
             WebAudioTheme {
-                MainScreenRoot()
+                val vm: MainViewModel = viewModel()
+                viewModelRef = vm
+                if (checkCaptureRequest) {
+                    LaunchedEffect(Unit) {
+                        vm.requestMediaProjectionCapture()
+                    }
+                }
+                MainScreenRoot(viewModel = vm)
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == ACTION_REQUEST_AUDIO_CAPTURE) {
+            viewModelRef?.requestMediaProjectionCapture()
         }
     }
 }
 
 @Composable
 fun MainScreenRoot(
+    triggerCapturePromptOnStart: Boolean = false,
     viewModel: MainViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
     val snackMessage by viewModel.snackMessage.collectAsStateWithLifecycle()
+    val isMediaProjectionReady by viewModel.isMediaProjectionReady.collectAsStateWithLifecycle()
+    val triggerMediaProjectionRequest by viewModel.triggerMediaProjectionRequest.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    var pendingRecordAction by remember { mutableStateOf(false) }
+
+    val projectionManager = remember {
+        context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+    }
 
     // MediaProjection launcher for internal audio playback capture
     val mediaProjectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            val projection = projectionManager.getMediaProjection(result.resultCode, result.data!!)
-            AudioRecordManager.mediaProjection = projection
-            viewModel.showSnack("Izin rekam audio internal browser aktif!")
+            viewModel.setMediaProjectionData(result.resultCode, result.data!!)
+            if (pendingRecordAction) {
+                pendingRecordAction = false
+                viewModel.startRecording()
+            }
         } else {
-            viewModel.showSnack("Mode mikrofon digunakan (izin audio internal dilewati)")
+            pendingRecordAction = false
+            viewModel.showSnack("Perekaman audio browser memerlukan izin capture audio sistem.")
         }
     }
 
-    // Permission launchers
+    val requestMediaProjectionPrompt: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            mediaProjectionLauncher.launch(projectionManager.createScreenCaptureIntent())
+        } else {
+            viewModel.showSnack("Perekaman internal audio memerlukan Android 10 atau lebih baru")
+        }
+    }
+
+    // Permission launcher for standard runtime permissions
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
         val audioGranted = perms[Manifest.permission.RECORD_AUDIO] == true
-        if (audioGranted) {
-            viewModel.showSnack("Izin audio diberikan")
+        if (audioGranted && !isMediaProjectionReady) {
+            // Automatically prompt for system internal audio capture on first launch
+            requestMediaProjectionPrompt()
         }
     }
 
@@ -119,6 +164,15 @@ fun MainScreenRoot(
         }
         if (notGranted.isNotEmpty()) {
             permissionLauncher.launch(notGranted.toTypedArray())
+        } else if (triggerCapturePromptOnStart && !isMediaProjectionReady) {
+            requestMediaProjectionPrompt()
+        }
+    }
+
+    LaunchedEffect(triggerMediaProjectionRequest) {
+        if (triggerMediaProjectionRequest > 0 && !isMediaProjectionReady) {
+            requestMediaProjectionPrompt()
+            viewModel.onMediaProjectionRequested()
         }
     }
 
@@ -204,6 +258,10 @@ fun MainScreenRoot(
                 AppScreen.STUDIO_BROWSER -> {
                     StudioBrowserScreen(
                         viewModel = viewModel,
+                        onRequestMediaProjection = {
+                            pendingRecordAction = true
+                            requestMediaProjectionPrompt()
+                        },
                         onRequestOverlay = {
                             if (!viewModel.hasOverlayPermission()) {
                                 val intent = Intent(
@@ -226,10 +284,7 @@ fun MainScreenRoot(
                     FloatingSettingsScreen(
                         viewModel = viewModel,
                         onRequestMediaProjection = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                                mediaProjectionLauncher.launch(projectionManager.createScreenCaptureIntent())
-                            }
+                            requestMediaProjectionPrompt()
                         }
                     )
                 }

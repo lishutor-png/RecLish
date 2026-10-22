@@ -22,8 +22,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.io.RandomAccessFile
-import kotlin.math.abs
 import kotlin.math.sqrt
 
 enum class RecordingStatus {
@@ -56,7 +54,7 @@ class AudioRecordManager(private val context: Context) {
     @Volatile private var isCapturingInternal = false
     @Volatile private var isCapturePaused = false
 
-    // Direct MediaRecorder for Mic / Standalone
+    // Direct MediaRecorder for Mic
     private var mediaRecorder: MediaRecorder? = null
 
     private var startTimeMs = 0L
@@ -71,9 +69,8 @@ class AudioRecordManager(private val context: Context) {
 
     /**
      * Starts audio recording.
-     * If source is BROWSER_INTERNAL and mediaProjection is available (API 29+),
-     * captures internal system/browser audio output directly.
-     * Otherwise falls back to MediaRecorder / Microphone.
+     * When source is BROWSER_INTERNAL, STRICTLY captures internal system/browser audio output.
+     * NEVER silently falls back to microphone.
      */
     @SuppressLint("MissingPermission")
     suspend fun startRecording(
@@ -84,28 +81,52 @@ class AudioRecordManager(private val context: Context) {
         stopRecording() // ensure any previous session is cleaned up
 
         targetOutputFile = outputFile
-        val useInternal = source == AudioCaptureSource.BROWSER_INTERNAL &&
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                mediaProjection != null
 
-        val actualSource = if (useInternal) AudioCaptureSource.BROWSER_INTERNAL else AudioCaptureSource.MICROPHONE
+        if (source == AudioCaptureSource.BROWSER_INTERNAL) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                _recorderState.value = RecorderState(
+                    status = RecordingStatus.ERROR,
+                    errorMessage = "Perekaman audio internal memerlukan Android 10 (API 29) atau lebih baru."
+                )
+                return@withContext false
+            }
+            if (mediaProjection == null) {
+                _recorderState.value = RecorderState(
+                    status = RecordingStatus.ERROR,
+                    errorMessage = "Izin audio sistem / browser belum aktif. Silakan izinkan akses capture audio sistem."
+                )
+                return@withContext false
+            }
 
-        _recorderState.value = RecorderState(
-            status = RecordingStatus.RECORDING,
-            durationMs = 0L,
-            amplitude = 0f,
-            activeSource = actualSource,
-            format = format,
-            currentFile = outputFile
-        )
+            _recorderState.value = RecorderState(
+                status = RecordingStatus.RECORDING,
+                durationMs = 0L,
+                amplitude = 0f,
+                activeSource = AudioCaptureSource.BROWSER_INTERNAL,
+                format = format,
+                currentFile = outputFile
+            )
 
-        startTimeMs = SystemClock.elapsedRealtime()
-        accumulatedDurationMs = 0L
-        startTimerAndMeter()
+            startTimeMs = SystemClock.elapsedRealtime()
+            accumulatedDurationMs = 0L
+            startTimerAndMeter()
 
-        if (useInternal) {
             return@withContext startInternalCapture(outputFile, format)
         } else {
+            // Microphone mode
+            _recorderState.value = RecorderState(
+                status = RecordingStatus.RECORDING,
+                durationMs = 0L,
+                amplitude = 0f,
+                activeSource = AudioCaptureSource.MICROPHONE,
+                format = format,
+                currentFile = outputFile
+            )
+
+            startTimeMs = SystemClock.elapsedRealtime()
+            accumulatedDurationMs = 0L
+            startTimerAndMeter()
+
             return@withContext startMediaRecorderCapture(outputFile, format)
         }
     }
@@ -113,22 +134,29 @@ class AudioRecordManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     private fun startInternalCapture(outputFile: File, format: String): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
-        val projection = mediaProjection ?: return false
+        val projection = mediaProjection ?: run {
+            _recorderState.value = _recorderState.value.copy(
+                status = RecordingStatus.ERROR,
+                errorMessage = "MediaProjection belum siap untuk merekam audio browser."
+            )
+            return false
+        }
 
         try {
             val sampleRate = 44100
             val channelConfig = AudioFormat.CHANNEL_IN_STEREO
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT
             val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-            val bufferSize = minBufferSize.coerceAtLeast(8192)
+            val bufferSize = minBufferSize.coerceAtLeast(16384)
 
+            // Capture all browser audio usages: media, games, and web audio contexts
             val playbackCaptureConfig = AudioPlaybackCaptureConfiguration.Builder(projection)
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
-            internalAudioRecord = AudioRecord.Builder()
+            val record = AudioRecord.Builder()
                 .setAudioPlaybackCaptureConfig(playbackCaptureConfig)
                 .setAudioFormat(
                     AudioFormat.Builder()
@@ -140,8 +168,17 @@ class AudioRecordManager(private val context: Context) {
                 .setBufferSizeInBytes(bufferSize)
                 .build()
 
+            if (record.state != AudioRecord.STATE_INITIALIZED) {
+                _recorderState.value = _recorderState.value.copy(
+                    status = RecordingStatus.ERROR,
+                    errorMessage = "Gagal menginisialisasi perekam audio internal (STATE_UNINITIALIZED)."
+                )
+                return false
+            }
+
+            internalAudioRecord = record
             tempPcmFile = File(context.cacheDir, "temp_rec_${System.currentTimeMillis()}.pcm")
-            internalAudioRecord?.startRecording()
+            record.startRecording()
             isCapturingInternal = true
             isCapturePaused = false
 
@@ -157,7 +194,7 @@ class AudioRecordManager(private val context: Context) {
                         val read = internalAudioRecord?.read(buffer, 0, buffer.size) ?: 0
                         if (read > 0) {
                             out.write(buffer, 0, read)
-                            // Compute amplitude from 16-bit PCM buffer
+                            // Compute amplitude directly from internal audio stream
                             computePcmAmplitude(buffer, read)
                         }
                     }
@@ -171,8 +208,11 @@ class AudioRecordManager(private val context: Context) {
             return true
         } catch (e: Exception) {
             e.printStackTrace()
-            // If internal capture fails, fallback to MediaRecorder
-            return startMediaRecorderCapture(outputFile, format)
+            _recorderState.value = _recorderState.value.copy(
+                status = RecordingStatus.ERROR,
+                errorMessage = "Gagal merekam audio browser: ${e.message}"
+            )
+            return false
         }
     }
 
@@ -214,7 +254,7 @@ class AudioRecordManager(private val context: Context) {
             e.printStackTrace()
             _recorderState.value = _recorderState.value.copy(
                 status = RecordingStatus.ERROR,
-                errorMessage = "Gagal memulai perekaman audio: ${e.message}"
+                errorMessage = "Gagal memulai mikrofon: ${e.message}"
             )
             return false
         }
@@ -287,12 +327,8 @@ class AudioRecordManager(private val context: Context) {
             val pcm = tempPcmFile
             val target = targetOutputFile
             if (pcm != null && pcm.exists() && target != null) {
-                if (target.name.endsWith(".wav", ignoreCase = true)) {
-                    AudioFormatHelper.writeWavHeader(pcm, target, 44100, 2, 16)
-                } else {
-                    // For MP3 container from internal PCM, write valid WAV format with MP3 metadata
-                    // or rename to ensure compatible playback across standard phone players
-                    AudioFormatHelper.writeWavHeader(pcm, target, 44100, 2, 16)
+                AudioFormatHelper.writeWavHeader(pcm, target, 44100, 2, 16)
+                if (target.name.endsWith(".mp3", ignoreCase = true)) {
                     AudioFormatHelper.attachMp3Metadata(target, target.nameWithoutExtension)
                 }
                 pcm.delete()

@@ -9,7 +9,6 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
-import android.os.SystemClock
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
@@ -21,10 +20,9 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import com.example.MainActivity
-import com.example.R
 import com.example.audio.AudioCaptureSource
-import com.example.audio.RecorderState
 import com.example.audio.RecordingStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +45,7 @@ class FloatingOverlayService : Service() {
     private lateinit var collapsedLayout: LinearLayout
     private lateinit var expandedLayout: LinearLayout
     private lateinit var tvTimer: TextView
+    private lateinit var tvBadge: TextView
     private lateinit var tvStatus: TextView
     private lateinit var ivStatusDot: ImageView
     private lateinit var btnToggleRecord: Button
@@ -105,7 +104,7 @@ class FloatingOverlayService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = dpToPx(16)
-            y = dpToPx(120)
+            y = dpToPx(140)
         }
 
         overlayView = FrameLayout(this).apply {
@@ -125,20 +124,20 @@ class FloatingOverlayService : Service() {
     private fun buildOverlayViews() {
         val root = overlayView ?: return
 
-        // 1. COLLAPSED VIEW (Compact Floating Pill)
+        // 1. COLLAPSED VIEW (Sleek Modern Pill)
         collapsedLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dpToPx(14), dpToPx(8), dpToPx(14), dpToPx(8))
-            background = createRoundedBackground(Color.parseColor("#E60F172A"), Color.parseColor("#38BDF8"), dpToPx(24))
-            elevation = dpToPx(8).toFloat()
+            setPadding(dpToPx(12), dpToPx(7), dpToPx(12), dpToPx(7))
+            background = createRoundedBackground(Color.parseColor("#F00F172A"), Color.parseColor("#38BDF8"), dpToPx(24))
+            elevation = dpToPx(10).toFloat()
 
-            // Status Indicator Dot
+            // Pulsing status dot
             ivStatusDot = ImageView(this@FloatingOverlayService).apply {
-                layoutParams = LinearLayout.LayoutParams(dpToPx(12), dpToPx(12)).apply {
+                layoutParams = LinearLayout.LayoutParams(dpToPx(10), dpToPx(10)).apply {
                     marginEnd = dpToPx(8)
                 }
-                setImageDrawable(createCircleDrawable(Color.parseColor("#EF4444")))
+                setImageDrawable(createCircleDrawable(Color.parseColor("#10B981")))
             }
             addView(ivStatusDot)
 
@@ -146,27 +145,30 @@ class FloatingOverlayService : Service() {
             tvTimer = TextView(this@FloatingOverlayService).apply {
                 text = "00:00"
                 setTextColor(Color.WHITE)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
                 typeface = android.graphics.Typeface.MONOSPACE
             }
             addView(tvTimer)
 
-            // Tap to expand icon
-            val expandIcon = TextView(this@FloatingOverlayService).apply {
-                text = " 🎙 "
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            // Rec badge
+            tvBadge = TextView(this@FloatingOverlayService).apply {
+                text = " 🔊 Rec"
+                setTextColor(Color.parseColor("#38BDF8"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setPadding(dpToPx(4), 0, 0, 0)
             }
-            addView(expandIcon)
+            addView(tvBadge)
         }
 
-        // 2. EXPANDED VIEW (Full Floating Control Bar)
+        // 2. EXPANDED VIEW (Full Floating Control Card)
         expandedLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(14))
-            background = createRoundedBackground(Color.parseColor("#F20F172A"), Color.parseColor("#6366F1"), dpToPx(20))
-            elevation = dpToPx(12).toFloat()
+            background = createRoundedBackground(Color.parseColor("#F80F172A"), Color.parseColor("#6366F1"), dpToPx(18))
+            elevation = dpToPx(14).toFloat()
             visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(dpToPx(240), FrameLayout.LayoutParams.WRAP_CONTENT)
+            layoutParams = FrameLayout.LayoutParams(dpToPx(250), FrameLayout.LayoutParams.WRAP_CONTENT)
 
             // Header row with Title and Close (X) button
             val headerRow = LinearLayout(this@FloatingOverlayService).apply {
@@ -177,7 +179,7 @@ class FloatingOverlayService : Service() {
                 }
 
                 tvStatus = TextView(this@FloatingOverlayService).apply {
-                    text = "RecLish Recorder"
+                    text = "RecLish Audio Tab"
                     setTextColor(Color.parseColor("#EF4444"))
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
                     setTypeface(null, android.graphics.Typeface.BOLD)
@@ -188,7 +190,7 @@ class FloatingOverlayService : Service() {
                 btnCloseOverlay = ImageView(this@FloatingOverlayService).apply {
                     layoutParams = LinearLayout.LayoutParams(dpToPx(24), dpToPx(24))
                     setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
-                    setColorFilter(Color.WHITE)
+                    setColorFilter(Color.parseColor("#94A3B8"))
                     setOnClickListener {
                         stopSelf()
                     }
@@ -209,8 +211,8 @@ class FloatingOverlayService : Service() {
                     text = "Mulai"
                     setTextColor(Color.WHITE)
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                    background = createRoundedBackground(Color.parseColor("#10B981"), Color.TRANSPARENT, dpToPx(12))
-                    layoutParams = LinearLayout.LayoutParams(0, dpToPx(40), 1f).apply {
+                    background = createRoundedBackground(Color.parseColor("#10B981"), Color.TRANSPARENT, dpToPx(10))
+                    layoutParams = LinearLayout.LayoutParams(0, dpToPx(38), 1.1f).apply {
                         marginEnd = dpToPx(6)
                     }
                     setOnClickListener {
@@ -220,11 +222,11 @@ class FloatingOverlayService : Service() {
                 addView(btnToggleRecord)
 
                 btnStopSave = Button(this@FloatingOverlayService).apply {
-                    text = "Simpan"
+                    text = "Simpan MP3"
                     setTextColor(Color.WHITE)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                    background = createRoundedBackground(Color.parseColor("#EF4444"), Color.TRANSPARENT, dpToPx(12))
-                    layoutParams = LinearLayout.LayoutParams(0, dpToPx(40), 1f)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                    background = createRoundedBackground(Color.parseColor("#EF4444"), Color.TRANSPARENT, dpToPx(10))
+                    layoutParams = LinearLayout.LayoutParams(0, dpToPx(38), 1.1f)
                     setOnClickListener {
                         handleStopRecording()
                     }
@@ -233,17 +235,17 @@ class FloatingOverlayService : Service() {
             }
             addView(buttonRow)
 
-            // Bottom row: Open App + Minimize
+            // Bottom row: Open RecLish App + Minimize
             val bottomRow = LinearLayout(this@FloatingOverlayService).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
 
                 btnOpenApp = Button(this@FloatingOverlayService).apply {
-                    text = "Buka Aplikasi"
-                    setTextColor(Color.parseColor("#CBD5E1"))
+                    text = "Buka RecLish"
+                    setTextColor(Color.parseColor("#E2E8F0"))
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                    background = createRoundedBackground(Color.parseColor("#334155"), Color.TRANSPARENT, dpToPx(10))
-                    layoutParams = LinearLayout.LayoutParams(0, dpToPx(36), 1.2f).apply {
+                    background = createRoundedBackground(Color.parseColor("#334155"), Color.TRANSPARENT, dpToPx(8))
+                    layoutParams = LinearLayout.LayoutParams(0, dpToPx(34), 1.2f).apply {
                         marginEnd = dpToPx(6)
                     }
                     setOnClickListener {
@@ -257,10 +259,10 @@ class FloatingOverlayService : Service() {
 
                 btnMinimize = Button(this@FloatingOverlayService).apply {
                     text = "Kecilkan"
-                    setTextColor(Color.parseColor("#CBD5E1"))
+                    setTextColor(Color.parseColor("#94A3B8"))
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                    background = createRoundedBackground(Color.parseColor("#1E293B"), Color.TRANSPARENT, dpToPx(10))
-                    layoutParams = LinearLayout.LayoutParams(0, dpToPx(36), 1f)
+                    background = createRoundedBackground(Color.parseColor("#1E293B"), Color.TRANSPARENT, dpToPx(8))
+                    layoutParams = LinearLayout.LayoutParams(0, dpToPx(34), 1f)
                     setOnClickListener {
                         toggleExpanded(false)
                     }
@@ -275,6 +277,16 @@ class FloatingOverlayService : Service() {
     }
 
     private fun handleToggleRecord() {
+        if (!AudioRecorderService.isMediaProjectionReady) {
+            val appIntent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                action = MainActivity.ACTION_REQUEST_AUDIO_CAPTURE
+            }
+            startActivity(appIntent)
+            Toast.makeText(this, "Izinkan akses perekaman audio sistem di RecLish!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val service = AudioRecorderService.instance
         if (service == null) {
             // Start recording via service intent
@@ -288,6 +300,7 @@ class FloatingOverlayService : Service() {
             } else {
                 startService(startIntent)
             }
+            Toast.makeText(this, "Merekam suara dari browser...", Toast.LENGTH_SHORT).show()
         } else {
             val state = service.getRecorderState().value
             when (state.status) {
@@ -314,6 +327,7 @@ class FloatingOverlayService : Service() {
                     } else {
                         startService(startIntent)
                     }
+                    Toast.makeText(this, "Merekam suara dari browser...", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -324,6 +338,7 @@ class FloatingOverlayService : Service() {
             action = AudioRecorderService.ACTION_STOP
         }
         startService(stopIntent)
+        Toast.makeText(this, "Rekaman MP3 disimpan ke memori HP!", Toast.LENGTH_SHORT).show()
     }
 
     private fun toggleExpanded(expand: Boolean) {
@@ -371,7 +386,7 @@ class FloatingOverlayService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!isDragging) {
-                        // It was a tap! Expand controls
+                        // Tap toggles to expanded control card
                         toggleExpanded(true)
                     }
                     true
@@ -400,28 +415,40 @@ class FloatingOverlayService : Service() {
 
                     if (isRecording) {
                         ivStatusDot.setImageDrawable(createCircleDrawable(Color.parseColor("#EF4444")))
+                        tvBadge.text = " 🔴 Rec"
+                        tvBadge.setTextColor(Color.parseColor("#EF4444"))
                         btnToggleRecord.text = "Jeda"
-                        btnToggleRecord.background = createRoundedBackground(Color.parseColor("#F59E0B"), Color.TRANSPARENT, dpToPx(12))
+                        btnToggleRecord.background = createRoundedBackground(Color.parseColor("#F59E0B"), Color.TRANSPARENT, dpToPx(10))
                         tvStatus.text = "Merekam: $timeStr"
+                        tvStatus.setTextColor(Color.parseColor("#EF4444"))
                     } else if (isPaused) {
                         ivStatusDot.setImageDrawable(createCircleDrawable(Color.parseColor("#F59E0B")))
+                        tvBadge.text = " ⏸ Pause"
+                        tvBadge.setTextColor(Color.parseColor("#F59E0B"))
                         btnToggleRecord.text = "Lanjut"
-                        btnToggleRecord.background = createRoundedBackground(Color.parseColor("#10B981"), Color.TRANSPARENT, dpToPx(12))
+                        btnToggleRecord.background = createRoundedBackground(Color.parseColor("#10B981"), Color.TRANSPARENT, dpToPx(10))
                         tvStatus.text = "Dijeda: $timeStr"
+                        tvStatus.setTextColor(Color.parseColor("#F59E0B"))
                     } else {
-                        ivStatusDot.setImageDrawable(createCircleDrawable(Color.parseColor("#64748B")))
-                        btnToggleRecord.text = "Mulai"
-                        btnToggleRecord.background = createRoundedBackground(Color.parseColor("#10B981"), Color.TRANSPARENT, dpToPx(12))
-                        tvStatus.text = "Siap Merekam"
+                        ivStatusDot.setImageDrawable(createCircleDrawable(Color.parseColor("#10B981")))
+                        tvBadge.text = " 🔊 Tab"
+                        tvBadge.setTextColor(Color.parseColor("#38BDF8"))
+                        btnToggleRecord.text = "Mulai Rekam"
+                        btnToggleRecord.background = createRoundedBackground(Color.parseColor("#10B981"), Color.TRANSPARENT, dpToPx(10))
+                        tvStatus.text = "Siap Merekam Audio Tab"
+                        tvStatus.setTextColor(Color.parseColor("#38BDF8"))
                     }
                 } else {
                     isRecording = false
                     isPaused = false
                     tvTimer.text = "Siap"
                     ivStatusDot.setImageDrawable(createCircleDrawable(Color.parseColor("#10B981")))
-                    btnToggleRecord.text = "Mulai"
-                    btnToggleRecord.background = createRoundedBackground(Color.parseColor("#10B981"), Color.TRANSPARENT, dpToPx(12))
-                    tvStatus.text = "Overlay Aktif"
+                    tvBadge.text = " 🔊 Tab"
+                    tvBadge.setTextColor(Color.parseColor("#38BDF8"))
+                    btnToggleRecord.text = "Mulai Rekam"
+                    btnToggleRecord.background = createRoundedBackground(Color.parseColor("#10B981"), Color.TRANSPARENT, dpToPx(10))
+                    tvStatus.text = "Bubble Siap di Atas Chrome"
+                    tvStatus.setTextColor(Color.parseColor("#38BDF8"))
                 }
                 delay(200)
             }

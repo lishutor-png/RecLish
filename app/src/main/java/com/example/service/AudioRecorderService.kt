@@ -1,5 +1,6 @@
 package com.example.service
 
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,9 +9,13 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.os.Binder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.R
@@ -24,7 +29,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.io.File
 import java.util.Locale
 
 class AudioRecorderService : Service() {
@@ -47,7 +51,13 @@ class AudioRecorderService : Service() {
         const val EXTRA_SOURCE = "extra_source"
         const val EXTRA_TITLE = "extra_title"
 
-        // Singleton reference for overlay and viewmodel communication
+        // MediaProjection token holder for Android 10+ internal browser audio
+        var mediaProjectionResultCode: Int = Activity.RESULT_CANCELED
+        var mediaProjectionResultData: Intent? = null
+
+        val isMediaProjectionReady: Boolean
+            get() = mediaProjectionResultData != null && mediaProjectionResultCode == Activity.RESULT_OK
+
         var instance: AudioRecorderService? = null
             private set
     }
@@ -105,8 +115,9 @@ class AudioRecorderService : Service() {
 
     private fun startRecordingSession(format: String, source: AudioCaptureSource, customTitle: String?) {
         val file = repository.createNewRecordingFile(format)
-        val initialNotification = buildNotification("Mempersiapkan rekaman...", isPaused = false)
+        val initialNotification = buildNotification("Mempersiapkan perekaman audio...", isPaused = false)
 
+        // Strict Android 14+ conformance: startForeground with MEDIA_PROJECTION type BEFORE getMediaProjection
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val foregroundType = if (source == AudioCaptureSource.BROWSER_INTERNAL && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
@@ -116,6 +127,25 @@ class AudioRecorderService : Service() {
             startForeground(NOTIFICATION_ID, initialNotification, foregroundType)
         } else {
             startForeground(NOTIFICATION_ID, initialNotification)
+        }
+
+        // Initialize MediaProjection while foreground service with type MEDIA_PROJECTION is active
+        if (source == AudioCaptureSource.BROWSER_INTERNAL && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val mpData = mediaProjectionResultData
+            if (mpData != null) {
+                try {
+                    val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                    val projection = projectionManager.getMediaProjection(mediaProjectionResultCode, mpData)
+                    projection?.registerCallback(object : MediaProjection.Callback() {
+                        override fun onStop() {
+                            AudioRecordManager.mediaProjection = null
+                        }
+                    }, Handler(Looper.getMainLooper()))
+                    AudioRecordManager.mediaProjection = projection
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
 
         scope.launch {
@@ -132,9 +162,9 @@ class AudioRecorderService : Service() {
             val completedFile = audioRecordManager.stopRecording()
             val state = audioRecordManager.recorderState.value
             if (completedFile != null && completedFile.exists() && state.durationMs > 500) {
-                val defaultTitle = "Rekaman Browser ${System.currentTimeMillis() % 10000}"
+                val defaultTitle = "Audio Browser ${System.currentTimeMillis() % 10000}"
                 val sourceLabel = if (state.activeSource == AudioCaptureSource.BROWSER_INTERNAL) {
-                    "Browser Audio"
+                    "Browser Audio (Internal)"
                 } else {
                     "Mikrofon"
                 }
@@ -156,10 +186,10 @@ class AudioRecorderService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Perekam Audio Browser",
+                "Perekam Audio Browser RecLish",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Notifikasi status perekaman audio di latar belakang tanpa mengganggu"
+                description = "Status perekaman audio latar belakang tanpa gangguan suara luar"
                 setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
@@ -178,7 +208,6 @@ class AudioRecorderService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Pause or Resume action
         val pauseResumeIntent = Intent(this, AudioRecorderService::class.java).apply {
             action = if (isPaused) ACTION_RESUME else ACTION_PAUSE
         }
@@ -190,7 +219,6 @@ class AudioRecorderService : Service() {
         )
         val pauseResumeActionText = if (isPaused) "Lanjutkan" else "Jeda"
 
-        // Stop action
         val stopIntent = Intent(this, AudioRecorderService::class.java).apply {
             action = ACTION_STOP
         }
@@ -202,7 +230,7 @@ class AudioRecorderService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("RecLish")
+            .setContentTitle("RecLish - Audio Tab Browser")
             .setContentText(statusText)
             .setSmallIcon(R.drawable.ic_reclish_logo)
             .setContentIntent(openAppPendingIntent)
@@ -218,7 +246,7 @@ class AudioRecorderService : Service() {
         val mins = totalSecs / 60
         val secs = totalSecs % 60
         val timeStr = String.format(Locale.getDefault(), "%02d:%02d", mins, secs)
-        val sourceLabel = if (state.activeSource == AudioCaptureSource.BROWSER_INTERNAL) "Audio Browser" else "Mikrofon"
+        val sourceLabel = if (state.activeSource == AudioCaptureSource.BROWSER_INTERNAL) "🔊 Audio Tab Browser" else "🎙 Mikrofon"
         val statusText = if (state.status == RecordingStatus.PAUSED) {
             "Dijeda ($timeStr) - $sourceLabel"
         } else {

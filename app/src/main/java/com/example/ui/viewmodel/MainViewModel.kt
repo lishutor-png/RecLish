@@ -73,6 +73,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isOverlayActive = MutableStateFlow(false)
     val isOverlayActive: StateFlow<Boolean> = _isOverlayActive.asStateFlow()
 
+    // MediaProjection internal audio capture status
+    private val _isMediaProjectionReady = MutableStateFlow(AudioRecorderService.isMediaProjectionReady)
+    val isMediaProjectionReady: StateFlow<Boolean> = _isMediaProjectionReady.asStateFlow()
+
+    private val _triggerMediaProjectionRequest = MutableStateFlow(0)
+    val triggerMediaProjectionRequest: StateFlow<Int> = _triggerMediaProjectionRequest.asStateFlow()
+
     // Status snackbar message
     private val _snackMessage = MutableStateFlow<String?>(null)
     val snackMessage: StateFlow<String?> = _snackMessage.asStateFlow()
@@ -114,9 +121,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _recorderState.value = RecorderState(status = RecordingStatus.IDLE)
                 }
                 _isOverlayActive.value = FloatingOverlayService.isOverlayRunning
+                _isMediaProjectionReady.value = AudioRecorderService.isMediaProjectionReady
                 delay(120)
             }
         }
+    }
+
+    fun setMediaProjectionData(resultCode: Int, data: Intent) {
+        AudioRecorderService.mediaProjectionResultCode = resultCode
+        AudioRecorderService.mediaProjectionResultData = data
+        _isMediaProjectionReady.value = true
+        showSnack("✅ Audio Browser Aktif! Suara jernih dari tab akan direkam.")
+    }
+
+    fun requestMediaProjectionCapture() {
+        _triggerMediaProjectionRequest.value += 1
+    }
+
+    fun onMediaProjectionRequested() {
+        // acknowledged
     }
 
     fun setScreen(screen: AppScreen) {
@@ -213,6 +236,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             showSnack("Floating overlay aktif di atas aplikasi lain!")
         }
         return true
+    }
+
+    fun launchChromeAndFloating(context: Context, onRequestMediaProjection: () -> Unit) {
+        if (_selectedSource.value == AudioCaptureSource.BROWSER_INTERNAL && !_isMediaProjectionReady.value) {
+            onRequestMediaProjection()
+            showSnack("Izinkan penangkapan audio sistem terlebih dahulu agar suara tab terekam jernih.")
+            return
+        }
+
+        if (!hasOverlayPermission()) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${context.packageName}")
+            ).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+            showSnack("Aktifkan izin 'Tampilkan di atas aplikasi lain' untuk bubble rekam.")
+            return
+        }
+
+        // Activate overlay bubble if not running
+        if (!_isOverlayActive.value) {
+            val intent = Intent(context, FloatingOverlayService::class.java).apply {
+                action = FloatingOverlayService.ACTION_SHOW
+            }
+            context.startService(intent)
+            _isOverlayActive.value = true
+        }
+
+        // Launch Google Chrome app
+        val chromeIntent = context.packageManager.getLaunchIntentForPackage("com.android.chrome")
+            ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+        chromeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            context.startActivity(chromeIntent)
+            showSnack("🚀 Membuka Google Chrome dengan Bubble RecLish!")
+        } catch (e: Exception) {
+            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(webIntent)
+            showSnack("Membuka browser...")
+        }
     }
 
     // --- Player Actions ---

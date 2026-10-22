@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -163,7 +164,7 @@ fun RecordingsScreen(
                             onClick = { showSortMenu = true },
                             modifier = Modifier.testTag("btn_sort_menu")
                         ) {
-                            Icon(Icons.Default.Sort, contentDescription = "Urutkan", tint = StudioPrimary)
+                            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Urutkan", tint = StudioPrimary)
                         }
 
                         DropdownMenu(

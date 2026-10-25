@@ -359,6 +359,50 @@ class AudioRecordManager(private val context: Context) {
         completedFile
     }
 
+    suspend fun cancelRecording() = withContext(Dispatchers.IO) {
+        if (_recorderState.value.status == RecordingStatus.IDLE) return@withContext
+
+        timerJob?.cancel()
+        timerJob = null
+
+        // Clean up internal capture
+        if (isCapturingInternal) {
+            isCapturingInternal = false
+            try {
+                captureThread?.join(500)
+            } catch (ignored: Exception) {}
+            try {
+                internalAudioRecord?.stop()
+                internalAudioRecord?.release()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            internalAudioRecord = null
+
+            // Delete temporary pcm file without converting
+            tempPcmFile?.let {
+                if (it.exists()) it.delete()
+            }
+        }
+
+        // Clean up MediaRecorder
+        try {
+            mediaRecorder?.stop()
+            mediaRecorder?.release()
+        } catch (e: Exception) {
+            // ignore
+        } finally {
+            mediaRecorder = null
+        }
+
+        // Delete target output file if partially written
+        targetOutputFile?.let {
+            if (it.exists()) it.delete()
+        }
+
+        reset()
+    }
+
     private fun startTimerAndMeter() {
         timerJob?.cancel()
         timerJob = scope.launch {

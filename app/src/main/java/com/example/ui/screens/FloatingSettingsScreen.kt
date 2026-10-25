@@ -269,7 +269,7 @@ fun FloatingSettingsScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Giant Launch Button
+                // Launch Button
                 Button(
                     onClick = {
                         viewModel.launchChromeAndFloating(context, onRequestMediaProjection)
@@ -284,12 +284,21 @@ fun FloatingSettingsScreen(
                     Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Buka Google Chrome & Mulai Rekam",
+                        text = "Buka Google Chrome (Bubble Siaga)",
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "💡 Bubble terbuka dalam mode Siaga (tidak langsung merekam). Anda bebas mencari lagu di Chrome, lalu ketuk 'Mulai Rekam' di bubble saat musik diputar.",
+                    fontSize = 10.5.sp,
+                    color = StudioTextSecondary,
+                    lineHeight = 14.sp
+                )
             }
         }
 
@@ -398,7 +407,7 @@ fun FloatingSettingsScreen(
                                 color = StudioTextPrimary
                             )
                             Text(
-                                text = "Bisa digeser ke mana saja. Ketuk bubble untuk Jeda atau Simpan rekaman MP3.",
+                                text = "Bisa digeser ke mana saja. Ketuk bubble untuk Mulai, Jeda, Simpan MP3, atau Batal rekaman (tidak disimpan).",
                                 fontSize = 10.sp,
                                 color = StudioTextSecondary
                             )

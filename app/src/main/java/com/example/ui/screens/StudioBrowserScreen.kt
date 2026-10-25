@@ -40,6 +40,7 @@ import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mic
@@ -58,6 +59,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -686,6 +688,19 @@ fun StudioBrowserScreen(
                                 Icon(Icons.Default.Stop, contentDescription = "Simpan", modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Simpan MP3", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Cancel Button
+                            OutlinedButton(
+                                onClick = { viewModel.cancelRecording() },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.height(40.dp).testTag("btn_cancel_recording")
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Batal", modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Batal", fontSize = 11.sp)
                             }
                         }
                     }

@@ -46,6 +46,7 @@ class AudioRecorderService : Service() {
         const val ACTION_PAUSE = "com.example.service.ACTION_PAUSE"
         const val ACTION_RESUME = "com.example.service.ACTION_RESUME"
         const val ACTION_STOP = "com.example.service.ACTION_STOP"
+        const val ACTION_CANCEL = "com.example.service.ACTION_CANCEL"
 
         const val EXTRA_FORMAT = "extra_format"
         const val EXTRA_SOURCE = "extra_source"
@@ -108,6 +109,9 @@ class AudioRecorderService : Service() {
             }
             ACTION_STOP -> {
                 stopRecordingSession()
+            }
+            ACTION_CANCEL -> {
+                cancelRecordingSession()
             }
         }
         return START_NOT_STICKY
@@ -177,6 +181,14 @@ class AudioRecorderService : Service() {
                 )
             }
             audioRecordManager.reset()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
+
+    private fun cancelRecordingSession() {
+        scope.launch {
+            audioRecordManager.cancelRecording()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }

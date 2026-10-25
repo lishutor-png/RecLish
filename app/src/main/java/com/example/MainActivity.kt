@@ -113,8 +113,6 @@ fun MainScreenRoot(
     val triggerMediaProjectionRequest by viewModel.triggerMediaProjectionRequest.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var pendingRecordAction by remember { mutableStateOf(false) }
-
     val projectionManager = remember {
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
     }
@@ -125,12 +123,7 @@ fun MainScreenRoot(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             viewModel.setMediaProjectionData(result.resultCode, result.data!!)
-            if (pendingRecordAction) {
-                pendingRecordAction = false
-                viewModel.startRecording()
-            }
         } else {
-            pendingRecordAction = false
             viewModel.showSnack("Perekaman audio browser memerlukan izin capture audio sistem.")
         }
     }
@@ -259,7 +252,6 @@ fun MainScreenRoot(
                     StudioBrowserScreen(
                         viewModel = viewModel,
                         onRequestMediaProjection = {
-                            pendingRecordAction = true
                             requestMediaProjectionPrompt()
                         },
                         onRequestOverlay = {

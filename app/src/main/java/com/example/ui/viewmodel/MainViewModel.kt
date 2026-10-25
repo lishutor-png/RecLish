@@ -210,6 +210,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showSnack("Rekaman disimpan ke memori!")
     }
 
+    fun cancelRecording() {
+        val intent = Intent(context, AudioRecorderService::class.java).apply {
+            action = AudioRecorderService.ACTION_CANCEL
+        }
+        context.startService(intent)
+        showSnack("Rekaman dibatalkan (file dihapus)")
+    }
+
     // --- Floating Overlay Controls ---
 
     fun hasOverlayPermission(): Boolean {
@@ -274,13 +282,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         chromeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(chromeIntent)
-            showSnack("🚀 Membuka Google Chrome dengan Bubble RecLish!")
+            showSnack("🚀 Bubble siap di Chrome (Mode Siaga)! Ketuk 'Mulai Rekam' di bubble saat musik diputar.")
         } catch (e: Exception) {
             val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.startActivity(webIntent)
-            showSnack("Membuka browser...")
+            showSnack("🚀 Bubble siap! Ketuk 'Mulai Rekam' di bubble saat musik diputar.")
         }
     }
 

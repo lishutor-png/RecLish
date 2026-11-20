@@ -41,8 +41,8 @@ Proyek ini telah dikonfigurasi untuk langsung dapat di-build di GitHub melalui *
 ### Cara Build & Download APK dari GitHub:
 1. Push repositori ini ke GitHub Anda (`git push origin main`).
 2. Masuk ke tab **Actions** dan tunggu workflow **"Build RecLish Android APK"** selesai (centang hijau).
-3. **Cara Termudah (Unduh Langsung `.apk`)**: Buka halaman **Releases** di sisi kanan repositori GitHub Anda (tag `latest`), lalu klik **`RecLish-release.apk`** atau **`RecLish-debug.apk`** di bagian **Assets**.
-4. **Alternatif via Actions**: Masuk ke workflow run yang selesai lalu unduh dari bagian **Artifacts** (`RecLish-release-apk` / `RecLish-debug-apk`, berbentuk `.zip` yang perlu diekstrak).
+3. **Cara Termudah (Unduh Langsung `.apk`)**: Buka halaman **Releases** di sisi kanan repositori GitHub Anda (tag `latest`), lalu klik nama file **`RecLish.apk`** di bagian **Assets** (bukan ikon `sha256:` di sebelahnya).
+4. **Alternatif via Actions**: Buka workflow run yang selesai, klik bagian **Summary** untuk link unduhan langsung atau bagian **Artifacts** (`RecLish-apk`, berbentuk `.zip`).
 
 ### Build Lokal:
 ```bash

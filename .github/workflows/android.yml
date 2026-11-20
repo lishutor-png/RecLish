@@ -116,33 +116,22 @@ jobs:
           path: app/build/reports/tests/
           retention-days: 7
 
-      - name: Build Debug & Release APK
+      - name: Build RecLish APK
         run: |
-          ./gradlew assembleDebug --no-daemon --no-configuration-cache --stacktrace
           ./gradlew assembleRelease --no-daemon --no-configuration-cache --stacktrace
 
           mkdir -p release-apks
-          DEBUG_APK="$(find app/build/outputs/apk/debug -maxdepth 2 -name '*.apk' | head -n 1)"
           RELEASE_APK="$(find app/build/outputs/apk/release -maxdepth 2 -name '*.apk' | head -n 1)"
-          echo "Found Debug APK: $DEBUG_APK"
           echo "Found Release APK: $RELEASE_APK"
-          test -n "$DEBUG_APK" && cp "$DEBUG_APK" release-apks/RecLish-debug.apk
-          test -n "$RELEASE_APK" && cp "$RELEASE_APK" release-apks/RecLish-release.apk
-          ls -lh release-apks/
+          test -n "$RELEASE_APK"
+          cp "$RELEASE_APK" release-apks/RecLish.apk
+          ls -lh release-apks/RecLish.apk
 
-      - name: Upload Debug APK Artifact
+      - name: Upload RecLish APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RecLish-debug-apk
-          path: release-apks/RecLish-debug.apk
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload Release APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: RecLish-release-apk
-          path: release-apks/RecLish-release.apk
+          name: RecLish-apk
+          path: release-apks/RecLish.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -160,17 +149,23 @@ jobs:
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release edit "$TAG_NAME" \
               --title "RecLish APK ($TAG_NAME)" \
-              --notes "Build otomatis RecLish Android APK terbaru (commit ${GITHUB_SHA::7}). Klik langsung file .apk di bagian Assets untuk mengunduh tanpa ekstrak ZIP."
-            gh release upload "$TAG_NAME" release-apks/*.apk --clobber
+              --notes "Unduh langsung file **RecLish.apk** di bagian Assets (buka di browser Chrome/Edge jika memakai HP)."
+            gh release upload "$TAG_NAME" release-apks/RecLish.apk --clobber
           else
-            gh release create "$TAG_NAME" release-apks/*.apk \
+            gh release create "$TAG_NAME" release-apks/RecLish.apk \
               --target "$GITHUB_SHA" \
               --title "RecLish APK ($TAG_NAME)" \
-              --notes "Build otomatis RecLish Android APK terbaru (commit ${GITHUB_SHA::7}). Klik langsung file .apk di bagian Assets untuk mengunduh tanpa ekstrak ZIP."
+              --notes "Unduh langsung file **RecLish.apk** di bagian Assets (buka di browser Chrome/Edge jika memakai HP)."
           fi
 
+          DIRECT_URL="${{ github.server_url }}/${{ github.repository }}/releases/download/${TAG_NAME}/RecLish.apk"
           {
-            echo "### APK Siap Diunduh"
-            echo "- Unduh langsung file \`.apk\` (tanpa ZIP) di halaman Releases: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${TAG_NAME}"
-            echo "- Atau dari bagian **Artifacts** di halaman workflow run ini (dalam format \`.zip\`)."
+            echo "### RecLish.apk Siap Diunduh"
+            echo ""
+            echo "1. **Link Unduh Langsung (.apk tanpa ZIP):**"
+            echo "   ${DIRECT_URL}"
+            echo "2. **Halaman Releases:**"
+            echo "   ${{ github.server_url }}/${{ github.repository }}/releases/tag/${TAG_NAME}"
+            echo ""
+            echo "> Tips HP: Klik nama file **RecLish.apk** (bukan ikon salin \`sha256:\`), dan buka di browser Chrome jika muncul kendala di aplikasi/webview."
           } >> "$GITHUB_STEP_SUMMARY"

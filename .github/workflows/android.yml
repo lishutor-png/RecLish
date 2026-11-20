@@ -97,8 +97,8 @@ jobs:
             keytool -genkeypair -alias androiddebugkey -keypass android -keystore debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
           fi
 
-          # 3. Ensure valid my-upload-key.jks exists for release packaging
-          if [ ! -f "my-upload-key.jks" ] || ! keytool -list -keystore my-upload-key.jks -storepass android >/dev/null 2>&1; then
+          # 3. Ensure valid my-upload-key.jks with alias 'upload' exists for release packaging
+          if [ ! -f "my-upload-key.jks" ] || ! keytool -list -keystore my-upload-key.jks -alias upload -storepass android >/dev/null 2>&1; then
             rm -f my-upload-key.jks
             keytool -genkeypair -alias upload -keypass android -keystore my-upload-key.jks -storepass android -dname "CN=RecLish,O=RecLish,C=US" -keyalg RSA -keysize 2048 -validity 10000
           fi
@@ -121,16 +121,56 @@ jobs:
           ./gradlew assembleDebug --no-daemon --no-configuration-cache --stacktrace
           ./gradlew assembleRelease --no-daemon --no-configuration-cache --stacktrace
 
+          mkdir -p release-apks
+          DEBUG_APK="$(find app/build/outputs/apk/debug -maxdepth 2 -name '*.apk' | head -n 1)"
+          RELEASE_APK="$(find app/build/outputs/apk/release -maxdepth 2 -name '*.apk' | head -n 1)"
+          echo "Found Debug APK: $DEBUG_APK"
+          echo "Found Release APK: $RELEASE_APK"
+          test -n "$DEBUG_APK" && cp "$DEBUG_APK" release-apks/RecLish-debug.apk
+          test -n "$RELEASE_APK" && cp "$RELEASE_APK" release-apks/RecLish-release.apk
+          ls -lh release-apks/
+
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: RecLish-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
+          path: release-apks/RecLish-debug.apk
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: RecLish-release-apk
-          path: app/build/outputs/apk/release/*.apk
-          retention-days: 14
+          path: release-apks/RecLish-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish Direct APK to GitHub Releases
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_NAME="$GITHUB_REF_NAME"
+          else
+            TAG_NAME="latest"
+          fi
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" \
+              --title "RecLish APK ($TAG_NAME)" \
+              --notes "Build otomatis RecLish Android APK terbaru (commit ${GITHUB_SHA::7}). Klik langsung file .apk di bagian Assets untuk mengunduh tanpa ekstrak ZIP."
+            gh release upload "$TAG_NAME" release-apks/*.apk --clobber
+          else
+            gh release create "$TAG_NAME" release-apks/*.apk \
+              --target "$GITHUB_SHA" \
+              --title "RecLish APK ($TAG_NAME)" \
+              --notes "Build otomatis RecLish Android APK terbaru (commit ${GITHUB_SHA::7}). Klik langsung file .apk di bagian Assets untuk mengunduh tanpa ekstrak ZIP."
+          fi
+
+          {
+            echo "### APK Siap Diunduh"
+            echo "- Unduh langsung file \`.apk\` (tanpa ZIP) di halaman Releases: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${TAG_NAME}"
+            echo "- Atau dari bagian **Artifacts** di halaman workflow run ini (dalam format \`.zip\`)."
+          } >> "$GITHUB_STEP_SUMMARY"

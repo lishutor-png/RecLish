@@ -29,7 +29,31 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: 'gradle'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK Licenses
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          mkdir -p "$SDK_ROOT/licenses"
+          SDK_MANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDK_MANAGER" ]; then
+            SDK_MANAGER="$(command -v sdkmanager || true)"
+          fi
+          if [ -n "$SDK_MANAGER" ]; then
+            yes | "$SDK_MANAGER" --licenses > /dev/null 2>&1 || true
+          else
+            echo "Warning: sdkmanager not found in $SDK_ROOT or PATH"
+          fi
+
+      - name: Cache Robolectric & Maven Dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-robolectric-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-m2-robolectric-
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -43,30 +67,40 @@ jobs:
             touch .env
           fi
 
-          # 2. Ensure debug.keystore exists
+          # 2. Ensure valid debug.keystore exists
           if [ ! -f "debug.keystore" ]; then
             if [ -f "debug.keystore.base64" ]; then
-              base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
-            fi
-            if [ ! -f "debug.keystore" ] || [ ! -s "debug.keystore" ]; then
-              keytool -genkeypair -alias androiddebugkey -keypass android -keystore debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
+              base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || rm -f debug.keystore
             fi
           fi
+          if [ ! -f "debug.keystore" ] || ! keytool -list -keystore debug.keystore -storepass android >/dev/null 2>&1; then
+            rm -f debug.keystore
+            keytool -genkeypair -alias androiddebugkey -keypass android -keystore debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
+          fi
 
-          # 3. Ensure my-upload-key.jks exists for release packaging
-          if [ ! -f "my-upload-key.jks" ]; then
+          # 3. Ensure valid my-upload-key.jks exists for release packaging
+          if [ ! -f "my-upload-key.jks" ] || ! keytool -list -keystore my-upload-key.jks -storepass android >/dev/null 2>&1; then
+            rm -f my-upload-key.jks
             keytool -genkeypair -alias upload -keypass android -keystore my-upload-key.jks -storepass android -dname "CN=RecLish,O=RecLish,C=US" -keyalg RSA -keysize 2048 -validity 10000
           fi
 
           chmod +x gradlew
 
       - name: Run Unit Tests
-        run: ./gradlew testDebugUnitTest --no-daemon
+        run: ./gradlew testDebugUnitTest --no-daemon --no-configuration-cache --stacktrace
+
+      - name: Upload Unit Test Reports (on Failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/
+          retention-days: 7
 
       - name: Build Debug & Release APK
         run: |
-          ./gradlew assembleDebug --no-daemon --stacktrace
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon --no-configuration-cache --stacktrace
+          ./gradlew assembleRelease --no-daemon --no-configuration-cache --stacktrace
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4

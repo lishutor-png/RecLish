@@ -10,13 +10,13 @@
 
 1. **Merekam Suara dari Google Chrome & Browser Lain**
    - **Internal Audio Capture (Android 10+ / API 29+)**: Menangkap audio digital internal langsung dari tab browser Chrome tanpa menangkap suara bising sekitar.
-   - **Mikrofon & Komentar**: Pilihan alternatif untuk merekam suara speaker dan narasi pengguna.
-   - **Tab Studio Web Terintegrasi**: Browser bawaan dalam aplikasi dengan pintasan audio populer (SoundHelix, SoundCloud, Radio Garden, dll.).
+   - **Mengikuti Volume Media HP**: Tingkat kenyaringan rekaman otomatis menyesuaikan volume media perangkat dengan penguatan (*boost*) dan *limiter* anti-pecah.
+   - **Tab Studio Web Terintegrasi**: Halaman awal bersih tanpa file audio bawaan, dengan pintasan 1-tap ke **Google Chrome (Bubble Siaga)** dan kolom URL manual.
 
 2. **Berjalan di Atas Aplikasi Lain (*Floating Overlay Mode*)**
-   - Bubble kontrol mengambang minimalis dengan desain tombol rekam flat.
+   - Bubble kontrol mengambang minimalis dengan desain tombol rekam flat dan mode **Siaga** (tidak langsung merekam saat bubble terbuka).
    - Dapat digeser (*draggable*) ke mana saja di layar saat membuka Google Chrome.
-   - Mulai, Jeda, Lanjut, dan Simpan rekaman tanpa perlu keluar dari tab Chrome.
+   - Mulai, Jeda, Lanjut, **Batal (`✕ Batal`)**, dan Simpan rekaman tanpa perlu keluar dari tab Chrome.
 
 3. **Bekerja di Latar Belakang (*Background Foreground Service*)**
    - Perekaman tidak terhenti saat layar berpindah atau saat browsing di aplikasi lain.
@@ -46,8 +46,9 @@ Proyek ini telah dikonfigurasi untuk langsung dapat di-build di GitHub melalui *
 
 ### Build Lokal:
 ```bash
-# Pastikan Java 17 atau lebih baru terpasang
-./gradlew assembleDebug
+# Pastikan JDK 21 (atau minimal JDK 17) terpasang
+./gradlew testDebugUnitTest --no-configuration-cache
+./gradlew assembleDebug --no-configuration-cache
 
 # Hasil APK berada di:
 # app/build/outputs/apk/debug/app-debug.apk

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -22,7 +23,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlin.math.tanh
 
 enum class RecordingStatus {
     IDLE, RECORDING, PAUSED, FINISHED, ERROR
@@ -182,9 +185,13 @@ class AudioRecordManager(private val context: Context) {
             isCapturingInternal = true
             isCapturePaused = false
 
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
             captureThread = Thread({
                 val buffer = ByteArray(bufferSize)
                 val out = FileOutputStream(tempPcmFile)
+                var lastVolCheckMs = 0L
+                var effectiveGain = computeEffectiveGain(audioManager)
                 try {
                     while (isCapturingInternal) {
                         if (isCapturePaused) {
@@ -193,8 +200,16 @@ class AudioRecordManager(private val context: Context) {
                         }
                         val read = internalAudioRecord?.read(buffer, 0, buffer.size) ?: 0
                         if (read > 0) {
+                            val now = SystemClock.elapsedRealtime()
+                            if (now - lastVolCheckMs >= 80L) {
+                                effectiveGain = computeEffectiveGain(audioManager)
+                                lastVolCheckMs = now
+                            }
+                            if (effectiveGain != 1.0f) {
+                                applyGainAndLimiter(buffer, read, effectiveGain)
+                            }
                             out.write(buffer, 0, read)
-                            // Compute amplitude directly from internal audio stream
+                            // Compute amplitude directly from processed audio stream
                             computePcmAmplitude(buffer, read)
                         }
                     }
@@ -213,6 +228,44 @@ class AudioRecordManager(private val context: Context) {
                 errorMessage = "Gagal merekam audio browser: ${e.message}"
             )
             return false
+        }
+    }
+
+    private fun computeEffectiveGain(audioManager: AudioManager): Float {
+        val followVolume = AudioPreferences.isFollowDeviceVolume(context)
+        val boost = AudioPreferences.getBoostMultiplier(context)
+        if (!followVolume) return boost
+        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val ratio = (current.toFloat() / max.toFloat()).coerceIn(0f, 1f)
+        if (ratio <= 0.001f) return 0f
+        return ratio.toDouble().pow(0.75).toFloat() * boost
+    }
+
+    private fun applyGainAndLimiter(buffer: ByteArray, length: Int, gain: Float) {
+        if (gain == 0f) {
+            for (i in 0 until length) {
+                buffer[i] = 0
+            }
+            return
+        }
+        val limit = 28000f
+        val headroom = 32767f - limit
+        for (i in 0 until length - 1 step 2) {
+            val low = buffer[i].toInt() and 0xFF
+            val high = buffer[i + 1].toInt()
+            val sample = (high shl 8) or low
+            var amplified = sample * gain
+            if (amplified > limit) {
+                val excess = (amplified - limit) / 32768f
+                amplified = limit + headroom * tanh((excess * 2.0f).toDouble()).toFloat()
+            } else if (amplified < -limit) {
+                val excess = (-amplified - limit) / 32768f
+                amplified = -(limit + headroom * tanh((excess * 2.0f).toDouble()).toFloat())
+            }
+            val finalSample = amplified.toInt().coerceIn(-32768, 32767)
+            buffer[i] = (finalSample and 0xFF).toByte()
+            buffer[i + 1] = ((finalSample shr 8) and 0xFF).toByte()
         }
     }
 

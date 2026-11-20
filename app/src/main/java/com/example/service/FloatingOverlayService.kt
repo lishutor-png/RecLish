@@ -23,6 +23,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.example.MainActivity
 import com.example.audio.AudioCaptureSource
+import com.example.audio.AudioPreferences
 import com.example.audio.RecordingStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -333,7 +334,10 @@ class FloatingOverlayService : Service() {
     }
 
     private fun handleToggleRecord() {
-        if (!AudioRecorderService.isMediaProjectionReady) {
+        val selectedSource = AudioPreferences.getSource(this)
+        val selectedFormat = AudioPreferences.getFormat(this)
+
+        if (selectedSource == AudioCaptureSource.BROWSER_INTERNAL && !AudioRecorderService.isMediaProjectionReady) {
             val appIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 action = MainActivity.ACTION_REQUEST_AUDIO_CAPTURE
@@ -348,8 +352,8 @@ class FloatingOverlayService : Service() {
             // Start recording explicitly only when clicked
             val startIntent = Intent(this, AudioRecorderService::class.java).apply {
                 action = AudioRecorderService.ACTION_START
-                putExtra(AudioRecorderService.EXTRA_FORMAT, "MP3")
-                putExtra(AudioRecorderService.EXTRA_SOURCE, AudioCaptureSource.BROWSER_INTERNAL.name)
+                putExtra(AudioRecorderService.EXTRA_FORMAT, selectedFormat)
+                putExtra(AudioRecorderService.EXTRA_SOURCE, selectedSource.name)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(startIntent)
@@ -375,8 +379,8 @@ class FloatingOverlayService : Service() {
                 else -> {
                     val startIntent = Intent(this, AudioRecorderService::class.java).apply {
                         action = AudioRecorderService.ACTION_START
-                        putExtra(AudioRecorderService.EXTRA_FORMAT, "MP3")
-                        putExtra(AudioRecorderService.EXTRA_SOURCE, AudioCaptureSource.BROWSER_INTERNAL.name)
+                        putExtra(AudioRecorderService.EXTRA_FORMAT, selectedFormat)
+                        putExtra(AudioRecorderService.EXTRA_SOURCE, selectedSource.name)
                     }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         startForegroundService(startIntent)

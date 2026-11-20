@@ -1,6 +1,7 @@
 package com.example.audio
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.PlaybackParams
 import android.os.Build
@@ -47,8 +48,15 @@ class AudioPlayerManager(private val context: Context) {
 
         try {
             mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
                 setDataSource(recording.filePath)
                 prepare()
+                setVolume(1.0f, 1.0f)
                 val speed = _playbackState.value.playbackSpeed
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && speed != 1.0f) {
                     playbackParams = PlaybackParams().apply { this.speed = speed }

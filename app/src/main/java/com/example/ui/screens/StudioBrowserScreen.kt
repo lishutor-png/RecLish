@@ -8,11 +8,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +16,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -42,11 +40,13 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
@@ -77,9 +77,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -91,13 +92,11 @@ import com.example.ui.theme.StudioDarkCard
 import com.example.ui.theme.StudioDarkSurface
 import com.example.ui.theme.StudioPrimary
 import com.example.ui.theme.StudioRecordRed
-import com.example.ui.theme.StudioSecondary
 import com.example.ui.theme.StudioSuccessGreen
 import com.example.ui.theme.StudioTextMuted
 import com.example.ui.theme.StudioTextPrimary
 import com.example.ui.theme.StudioTextSecondary
 import com.example.ui.theme.StudioWarningAmber
-import com.example.ui.viewmodel.AppScreen
 import com.example.ui.viewmodel.MainViewModel
 import java.util.Locale
 
@@ -114,25 +113,38 @@ fun StudioBrowserScreen(
     val selectedFormat by viewModel.selectedFormat.collectAsStateWithLifecycle()
     val selectedSource by viewModel.selectedSource.collectAsStateWithLifecycle()
     val isMediaProjectionReady by viewModel.isMediaProjectionReady.collectAsStateWithLifecycle()
-    val isOverlayActive by viewModel.isOverlayActive.collectAsStateWithLifecycle()
+    val followDeviceVolume by viewModel.followDeviceVolume.collectAsStateWithLifecycle()
+    val boostMultiplier by viewModel.boostMultiplier.collectAsStateWithLifecycle()
+    val phoneVolumePercent by viewModel.phoneVolumePercent.collectAsStateWithLifecycle()
 
-    var urlInput by remember { mutableStateOf("https://www.soundhelix.com/audio-examples") }
-    var currentUrl by remember { mutableStateOf("https://www.soundhelix.com/audio-examples") }
-    var pageTitle by remember { mutableStateOf("RecLish Web Studio") }
+    // Start cleanly with NO sample/default audio page loaded
+    var urlInput by remember { mutableStateOf("") }
+    var currentUrl by remember { mutableStateOf("") }
     var webProgress by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val bookmarks = listOf(
-        "🎵 SoundHelix (Audio)" to "https://www.soundhelix.com/audio-examples",
-        "🌐 Google Search" to "https://www.google.com",
-        "▶️ YouTube Web" to "https://m.youtube.com",
-        "🎼 FreeMusicArchive" to "https://freemusicarchive.org",
-        "☁️ SoundCloud" to "https://m.soundcloud.com",
-        "📻 Radio Garden" to "https://radio.garden"
+    val quickLinks = listOf(
+        "🌐 Google" to "https://www.google.com",
+        "▶️ YouTube" to "https://m.youtube.com"
     )
+
+    val navigateToInput: (String) -> Unit = { raw ->
+        keyboardController?.hide()
+        val trimmed = raw.trim()
+        if (trimmed.isNotEmpty()) {
+            val destination = when {
+                trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
+                trimmed.contains(".") && !trimmed.contains(" ") -> "https://$trimmed"
+                else -> "https://www.google.com/search?q=$trimmed"
+            }
+            urlInput = destination
+            currentUrl = destination
+            webViewRef?.loadUrl(destination)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -177,7 +189,7 @@ fun StudioBrowserScreen(
                             color = StudioPrimary.copy(alpha = 0.2f)
                         ) {
                             Text(
-                                text = "Audio Tab Studio",
+                                text = "Browser Studio",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = StudioPrimary,
@@ -196,7 +208,7 @@ fun StudioBrowserScreen(
                             contentColor = StudioRecordRed
                         ),
                         shape = RoundedCornerShape(12.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         modifier = Modifier
                             .height(28.dp)
                             .border(1.dp, StudioRecordRed.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
@@ -214,26 +226,45 @@ fun StudioBrowserScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
+                        onClick = {
+                            currentUrl = ""
+                            urlInput = ""
+                            isLoading = false
+                            webViewRef?.loadUrl("about:blank")
+                        },
+                        modifier = Modifier.size(34.dp).testTag("web_btn_home")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Home,
+                            contentDescription = "Beranda",
+                            tint = if (currentUrl.isNotBlank()) StudioPrimary else StudioTextMuted,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    IconButton(
                         onClick = { webViewRef?.let { if (it.canGoBack()) it.goBack() } },
-                        enabled = webViewRef?.canGoBack() == true,
-                        modifier = Modifier.size(36.dp).testTag("web_btn_back")
+                        enabled = currentUrl.isNotBlank() && webViewRef?.canGoBack() == true,
+                        modifier = Modifier.size(32.dp).testTag("web_btn_back")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Kembali",
-                            tint = if (webViewRef?.canGoBack() == true) StudioTextPrimary else StudioTextMuted
+                            tint = if (currentUrl.isNotBlank() && webViewRef?.canGoBack() == true) StudioTextPrimary else StudioTextMuted,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
                     IconButton(
                         onClick = { webViewRef?.let { if (it.canGoForward()) it.goForward() } },
-                        enabled = webViewRef?.canGoForward() == true,
-                        modifier = Modifier.size(36.dp).testTag("web_btn_forward")
+                        enabled = currentUrl.isNotBlank() && webViewRef?.canGoForward() == true,
+                        modifier = Modifier.size(32.dp).testTag("web_btn_forward")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = "Maju",
-                            tint = if (webViewRef?.canGoForward() == true) StudioTextPrimary else StudioTextMuted
+                            tint = if (currentUrl.isNotBlank() && webViewRef?.canGoForward() == true) StudioTextPrimary else StudioTextMuted,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
@@ -256,33 +287,15 @@ fun StudioBrowserScreen(
                             unfocusedTextColor = StudioTextPrimary
                         ),
                         placeholder = {
-                            Text("Ketik URL atau cari audio...", fontSize = 12.sp, color = StudioTextMuted)
+                            Text("Ketik URL atau cari di web...", fontSize = 12.sp, color = StudioTextMuted)
                         },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                         keyboardActions = KeyboardActions(onGo = {
-                            keyboardController?.hide()
-                            val trimmed = urlInput.trim()
-                            val destination = when {
-                                trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
-                                trimmed.contains(".") -> "https://$trimmed"
-                                else -> "https://www.google.com/search?q=$trimmed"
-                            }
-                            currentUrl = destination
-                            webViewRef?.loadUrl(destination)
+                            navigateToInput(urlInput)
                         }),
                         trailingIcon = {
                             IconButton(
-                                onClick = {
-                                    keyboardController?.hide()
-                                    val trimmed = urlInput.trim()
-                                    val destination = when {
-                                        trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
-                                        trimmed.contains(".") -> "https://$trimmed"
-                                        else -> "https://www.google.com/search?q=$trimmed"
-                                    }
-                                    currentUrl = destination
-                                    webViewRef?.loadUrl(destination)
-                                },
+                                onClick = { navigateToInput(urlInput) },
                                 modifier = Modifier.size(28.dp).testTag("web_btn_go")
                             ) {
                                 Icon(Icons.Default.Search, contentDescription = "Buka", tint = StudioPrimary, modifier = Modifier.size(18.dp))
@@ -290,16 +303,18 @@ fun StudioBrowserScreen(
                         }
                     )
 
-                    IconButton(
-                        onClick = { webViewRef?.reload() },
-                        modifier = Modifier.size(36.dp).testTag("web_btn_reload")
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Muat Ulang", tint = StudioPrimary, modifier = Modifier.size(20.dp))
+                    if (currentUrl.isNotBlank()) {
+                        IconButton(
+                            onClick = { webViewRef?.reload() },
+                            modifier = Modifier.size(32.dp).testTag("web_btn_reload")
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Muat Ulang", tint = StudioPrimary, modifier = Modifier.size(18.dp))
+                        }
                     }
                 }
 
                 // Loading progress bar
-                if (isLoading) {
+                if (isLoading && currentUrl.isNotBlank()) {
                     LinearProgressIndicator(
                         progress = { webProgress / 100f },
                         modifier = Modifier
@@ -311,7 +326,7 @@ fun StudioBrowserScreen(
                     )
                 }
 
-                // Preset Bookmarks Chips
+                // Clean Neutral Quick Links (No built-in sample audio sites)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -319,7 +334,7 @@ fun StudioBrowserScreen(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    bookmarks.forEach { (name, target) ->
+                    quickLinks.forEach { (name, target) ->
                         FilterChip(
                             selected = currentUrl == target,
                             onClick = {
@@ -346,64 +361,174 @@ fun StudioBrowserScreen(
             }
         }
 
-        // WEBVIEW CONTAINER
+        // MAIN WORKSPACE: Clean Start Page OR On-Demand WebView
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            AndroidView(
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            mediaPlaybackRequiresUserGesture = false
-                            loadWithOverviewMode = true
-                            useWideViewPort = true
-                            builtInZoomControls = true
-                            displayZoomControls = false
-                            cacheMode = WebSettings.LOAD_DEFAULT
+            if (currentUrl.isBlank()) {
+                // Clean Start Page — No built-in sample audio files loaded automatically
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = StudioRecordRed.copy(alpha = 0.14f),
+                        border = BorderStroke(1.5.dp, StudioRecordRed.copy(alpha = 0.4f)),
+                        modifier = Modifier.size(64.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = null,
+                                tint = StudioRecordRed,
+                                modifier = Modifier.size(32.dp)
+                            )
                         }
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                isLoading = true
-                                url?.let { urlInput = it }
-                            }
-
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                isLoading = false
-                                url?.let { urlInput = it }
-                                view?.title?.let { pageTitle = it }
-                            }
-
-                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                                return false
-                            }
-                        }
-                        webChromeClient = object : WebChromeClient() {
-                            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                                webProgress = newProgress
-                                if (newProgress == 100) isLoading = false
-                            }
-
-                            override fun onReceivedTitle(view: WebView?, title: String?) {
-                                title?.let { pageTitle = it }
-                            }
-                        }
-                        loadUrl(currentUrl)
-                        webViewRef = this
                     }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Siap Merekam Audio Browser",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = StudioTextPrimary,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Tidak ada audio bawaan yang diputar otomatis. Buka Google Chrome dengan bubble pengontrol, atau ketik URL di bilah atas.",
+                        fontSize = 12.sp,
+                        color = StudioTextSecondary,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 17.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Primary 1-Tap Chrome Action
+                    Button(
+                        onClick = {
+                            viewModel.launchChromeAndFloating(context, onRequestMediaProjection)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = StudioRecordRed),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("btn_home_launch_chrome")
+                    ) {
+                        Icon(Icons.Default.RocketLaunch, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Buka Google Chrome (Bubble Siaga)",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Live Volume Status Card
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = StudioDarkSurface,
+                        border = BorderStroke(1.dp, Color(0xFF26334D)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = null,
+                                tint = StudioPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (followDeviceVolume)
+                                        "Volume Rekaman Mengikuti HP ($phoneVolumePercent%)"
+                                    else
+                                        "Penguat Tetap Aktif (${String.format(Locale.US, "%.1fx", boostMultiplier)})",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = StudioTextPrimary
+                                )
+                                Text(
+                                    text = "Penguat ${String.format(Locale.US, "%.1fx", boostMultiplier)} anti-pelan • Atur tombol volume HP sesuai kebutuhan",
+                                    fontSize = 10.sp,
+                                    color = StudioTextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                AndroidView(
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                mediaPlaybackRequiresUserGesture = false
+                                loadWithOverviewMode = true
+                                useWideViewPort = true
+                                builtInZoomControls = true
+                                displayZoomControls = false
+                                cacheMode = WebSettings.LOAD_DEFAULT
+                            }
+                            webViewClient = object : WebViewClient() {
+                                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                    isLoading = true
+                                    if (url != null && url != "about:blank") {
+                                        urlInput = url
+                                    }
+                                }
+
+                                override fun onPageFinished(view: WebView?, url: String?) {
+                                    isLoading = false
+                                    if (url != null && url != "about:blank") {
+                                        urlInput = url
+                                    }
+                                }
+
+                                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                    return false
+                                }
+                            }
+                            webChromeClient = object : WebChromeClient() {
+                                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                    webProgress = newProgress
+                                    if (newProgress == 100) isLoading = false
+                                }
+                            }
+                            loadUrl(currentUrl)
+                            webViewRef = this
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
-        // PERSISTENT RECORDING CONTROL DOCK (REVAMPED UI/UX)
+        // PERSISTENT RECORDING CONTROL DOCK
         Card(
             colors = CardDefaults.cardColors(containerColor = StudioDarkSurface),
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -429,7 +554,7 @@ fun StudioBrowserScreen(
                     Surface(
                         shape = RoundedCornerShape(9.dp),
                         color = if (isInternal) StudioPrimary.copy(alpha = 0.2f) else Color.Transparent,
-                        border = if (isInternal) androidx.compose.foundation.BorderStroke(1.dp, StudioPrimary) else null,
+                        border = if (isInternal) BorderStroke(1.dp, StudioPrimary) else null,
                         modifier = Modifier
                             .weight(1.2f)
                             .clip(RoundedCornerShape(9.dp))
@@ -463,7 +588,7 @@ fun StudioBrowserScreen(
                     Surface(
                         shape = RoundedCornerShape(9.dp),
                         color = if (isMic) StudioWarningAmber.copy(alpha = 0.2f) else Color.Transparent,
-                        border = if (isMic) androidx.compose.foundation.BorderStroke(1.dp, StudioWarningAmber) else null,
+                        border = if (isMic) BorderStroke(1.dp, StudioWarningAmber) else null,
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(9.dp))
@@ -498,7 +623,7 @@ fun StudioBrowserScreen(
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = if (isMediaProjectionReady) StudioSuccessGreen.copy(alpha = 0.12f) else StudioWarningAmber.copy(alpha = 0.15f),
-                        border = androidx.compose.foundation.BorderStroke(
+                        border = BorderStroke(
                             1.dp,
                             if (isMediaProjectionReady) StudioSuccessGreen.copy(alpha = 0.4f) else StudioWarningAmber
                         ),
@@ -521,7 +646,7 @@ fun StudioBrowserScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = if (isMediaProjectionReady)
-                                    "Audio browser siap: Merekam langsung audio tab tanpa suara luar/mic."
+                                    "Audio tab siap • Vol HP $phoneVolumePercent% (Penguat ${String.format(Locale.US, "%.1fx", boostMultiplier)})"
                                 else
                                     "⚠️ Izin audio sistem belum aktif. Ketuk di sini untuk aktifkan!",
                                 fontSize = 10.5.sp,
@@ -578,14 +703,14 @@ fun StudioBrowserScreen(
                             text = formattedTime,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontFamily = FontFamily.Monospace,
                             color = if (recorderState.status == RecordingStatus.RECORDING) StudioRecordRed else StudioTextPrimary,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }
 
-                // 4. ACTION BAR (Format Selection + Big Record Button)
+                // 4. ACTION BAR (Format Selection + Record/Pause/Save/Cancel Buttons)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -622,7 +747,7 @@ fun StudioBrowserScreen(
                     }
 
                     // Recording Action Buttons
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (recorderState.status == RecordingStatus.IDLE) {
                             Button(
                                 onClick = {
@@ -664,6 +789,7 @@ fun StudioBrowserScreen(
                                     containerColor = if (recorderState.status == RecordingStatus.RECORDING) StudioWarningAmber else StudioSuccessGreen
                                 ),
                                 shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                 modifier = Modifier.height(40.dp).testTag("btn_pause_resume")
                             ) {
                                 Icon(
@@ -683,19 +809,21 @@ fun StudioBrowserScreen(
                                 onClick = { viewModel.stopRecording() },
                                 colors = ButtonDefaults.buttonColors(containerColor = StudioRecordRed),
                                 shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                 modifier = Modifier.height(40.dp).testTag("btn_stop_save")
                             ) {
                                 Icon(Icons.Default.Stop, contentDescription = "Simpan", modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Simpan MP3", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Simpan", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
 
                             // Cancel Button
                             OutlinedButton(
                                 onClick = { viewModel.cancelRecording() },
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f)),
+                                border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f)),
                                 shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 modifier = Modifier.height(40.dp).testTag("btn_cancel_recording")
                             ) {
                                 Icon(Icons.Default.Close, contentDescription = "Batal", modifier = Modifier.size(15.dp))

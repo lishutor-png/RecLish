@@ -3,6 +3,7 @@ package com.example.ui.viewmodel
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -10,6 +11,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.AudioCaptureSource
 import com.example.audio.AudioPlayerManager
+import com.example.audio.AudioPreferences
 import com.example.audio.PlaybackState
 import com.example.audio.RecorderState
 import com.example.audio.RecordingStatus
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 enum class AppScreen {
     STUDIO_BROWSER,
@@ -44,6 +47,7 @@ enum class SortOption {
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val context: Context get() = getApplication()
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     val repository = RecordingRepository(context)
     val playerManager = AudioPlayerManager(context)
 
@@ -52,11 +56,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
     // Recorder configuration
-    private val _selectedFormat = MutableStateFlow("MP3") // "MP3", "WAV", "M4A"
+    private val _selectedFormat = MutableStateFlow(AudioPreferences.getFormat(context)) // "MP3", "WAV", "M4A"
     val selectedFormat: StateFlow<String> = _selectedFormat.asStateFlow()
 
-    private val _selectedSource = MutableStateFlow(AudioCaptureSource.BROWSER_INTERNAL)
+    private val _selectedSource = MutableStateFlow(AudioPreferences.getSource(context))
     val selectedSource: StateFlow<AudioCaptureSource> = _selectedSource.asStateFlow()
+
+    private val _followDeviceVolume = MutableStateFlow(AudioPreferences.isFollowDeviceVolume(context))
+    val followDeviceVolume: StateFlow<Boolean> = _followDeviceVolume.asStateFlow()
+
+    private val _boostMultiplier = MutableStateFlow(AudioPreferences.getBoostMultiplier(context))
+    val boostMultiplier: StateFlow<Float> = _boostMultiplier.asStateFlow()
+
+    private val _phoneVolumePercent = MutableStateFlow(readPhoneVolumePercent())
+    val phoneVolumePercent: StateFlow<Int> = _phoneVolumePercent.asStateFlow()
 
     // Recording status polling from service
     private val _recorderState = MutableStateFlow(RecorderState())
@@ -111,7 +124,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
-        // Poll recorder service state
+        // Poll recorder service state & device media volume
         viewModelScope.launch {
             while (isActive) {
                 val service = AudioRecorderService.instance
@@ -122,9 +135,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _isOverlayActive.value = FloatingOverlayService.isOverlayRunning
                 _isMediaProjectionReady.value = AudioRecorderService.isMediaProjectionReady
-                delay(120)
+                _phoneVolumePercent.value = readPhoneVolumePercent()
+                delay(150)
             }
         }
+    }
+
+    private fun readPhoneVolumePercent(): Int {
+        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        return ((current.toFloat() / max.toFloat()) * 100f).roundToInt().coerceIn(0, 100)
     }
 
     fun setMediaProjectionData(resultCode: Int, data: Intent) {
@@ -148,10 +168,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setFormat(format: String) {
         _selectedFormat.value = format
+        AudioPreferences.setFormat(context, format)
     }
 
     fun setSource(source: AudioCaptureSource) {
         _selectedSource.value = source
+        AudioPreferences.setSource(context, source)
+    }
+
+    fun setFollowDeviceVolume(enabled: Boolean) {
+        _followDeviceVolume.value = enabled
+        AudioPreferences.setFollowDeviceVolume(context, enabled)
+        showSnack(
+            if (enabled) "🔊 Suara rekaman kini mengikuti volume HP Anda."
+            else "🎚 Volume rekaman menggunakan penguat tetap (${_boostMultiplier.value}x)."
+        )
+    }
+
+    fun setBoostMultiplier(boost: Float) {
+        _boostMultiplier.value = boost
+        AudioPreferences.setBoostMultiplier(context, boost)
     }
 
     fun setSearchQuery(query: String) {

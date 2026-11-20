@@ -42,6 +42,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -84,6 +85,9 @@ fun FloatingSettingsScreen(
     val isMediaProjectionReady by viewModel.isMediaProjectionReady.collectAsStateWithLifecycle()
     val selectedFormat by viewModel.selectedFormat.collectAsStateWithLifecycle()
     val selectedSource by viewModel.selectedSource.collectAsStateWithLifecycle()
+    val followDeviceVolume by viewModel.followDeviceVolume.collectAsStateWithLifecycle()
+    val boostMultiplier by viewModel.boostMultiplier.collectAsStateWithLifecycle()
+    val phoneVolumePercent by viewModel.phoneVolumePercent.collectAsStateWithLifecycle()
     val hasOverlayPermission = viewModel.hasOverlayPermission()
 
     Column(
@@ -561,6 +565,169 @@ fun FloatingSettingsScreen(
                                 fontSize = 11.sp,
                                 color = StudioTextSecondary
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3B. VOLUME & AUDIO GAIN BOOST CARD
+        Card(
+            colors = CardDefaults.cardColors(containerColor = StudioDarkSurface),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFF26334D), RoundedCornerShape(16.dp))
+                .testTag("card_volume_boost")
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = StudioPrimary.copy(alpha = 0.15f),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = StudioPrimary)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Ikuti Volume Media HP",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = StudioTextPrimary
+                        )
+                        Text(
+                            text = if (followDeviceVolume)
+                                "Volume HP saat ini: $phoneVolumePercent% (otomatis ikut tombol volume)"
+                            else
+                                "Penguat tetap aktif (tidak terpengaruh volume speaker HP)",
+                            fontSize = 11.5.sp,
+                            color = if (followDeviceVolume) StudioSuccessGreen else StudioTextSecondary
+                        )
+                    }
+
+                    Switch(
+                        checked = followDeviceVolume,
+                        onCheckedChange = { viewModel.setFollowDeviceVolume(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = StudioPrimary,
+                            checkedTrackColor = StudioPrimary.copy(alpha = 0.4f),
+                            uncheckedThumbColor = StudioTextMuted,
+                            uncheckedTrackColor = Color(0xFF1E293B)
+                        ),
+                        modifier = Modifier.testTag("switch_follow_volume")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Live Phone Media Volume Meter
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(StudioDarkCard)
+                        .padding(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Level Volume Media HP",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = StudioTextSecondary
+                        )
+                        Text(
+                            text = "$phoneVolumePercent%",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (phoneVolumePercent == 0) StudioWarningAmber else StudioPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { phoneVolumePercent / 100f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = if (phoneVolumePercent == 0) StudioWarningAmber else StudioPrimary,
+                        trackColor = Color(0xFF1E293B)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Penguat Kejernihan & Kekerasan Suara",
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = StudioTextPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Menaikkan level audio tab agar tidak pelan dengan limiter anti-pecah:",
+                    fontSize = 11.sp,
+                    color = StudioTextSecondary
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        1.5f to "Normal",
+                        2.5f to "Jelas",
+                        3.5f to "Kencang",
+                        4.5f to "Maks"
+                    ).forEach { (mult, label) ->
+                        val isSelected = kotlin.math.abs(boostMultiplier - mult) < 0.1f
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) StudioPrimary.copy(alpha = 0.18f) else StudioDarkCard,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.5.dp,
+                                if (isSelected) StudioPrimary else Color(0xFF334155)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { viewModel.setBoostMultiplier(mult) }
+                                .testTag("chip_boost_$mult")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "${mult}x",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) StudioPrimary else StudioTextPrimary
+                                )
+                                Text(
+                                    text = label,
+                                    fontSize = 9.5.sp,
+                                    color = if (isSelected) StudioPrimary else StudioTextMuted
+                                )
+                            }
                         }
                     }
                 }

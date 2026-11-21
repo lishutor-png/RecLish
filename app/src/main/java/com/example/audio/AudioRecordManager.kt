@@ -65,6 +65,7 @@ class AudioRecordManager(private val context: Context) {
     private var timerJob: Job? = null
     private var targetOutputFile: File? = null
     private var tempPcmFile: File? = null
+    private var tempMicM4aFile: File? = null
 
     companion object {
         var mediaProjection: MediaProjection? = null
@@ -293,12 +294,21 @@ class AudioRecordManager(private val context: Context) {
             }
             mediaRecorder = recorder
 
+            val actualOutputFile = if (format.equals("M4A", ignoreCase = true)) {
+                tempMicM4aFile = null
+                outputFile
+            } else {
+                File(context.cacheDir, "temp_mic_${System.currentTimeMillis()}.m4a").also {
+                    tempMicM4aFile = it
+                }
+            }
+
             recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             recorder.setAudioEncodingBitRate(192000)
             recorder.setAudioSamplingRate(44100)
-            recorder.setOutputFile(outputFile.absolutePath)
+            recorder.setOutputFile(actualOutputFile.absolutePath)
             recorder.prepare()
             recorder.start()
 
@@ -362,8 +372,12 @@ class AudioRecordManager(private val context: Context) {
             accumulatedDurationMs
         }
 
+        val targetFormat = _recorderState.value.format.uppercase()
+        val wasInternal = isCapturingInternal
+        val hadMediaRecorder = mediaRecorder != null
+
         // Clean up internal capture
-        if (isCapturingInternal) {
+        if (wasInternal) {
             isCapturingInternal = false
             try {
                 captureThread?.join(500)
@@ -376,15 +390,30 @@ class AudioRecordManager(private val context: Context) {
             }
             internalAudioRecord = null
 
-            // Convert PCM to target file
+            // Encode processed PCM into genuine target format (MP3, M4A, or WAV)
             val pcm = tempPcmFile
             val target = targetOutputFile
             if (pcm != null && pcm.exists() && target != null) {
-                AudioFormatHelper.writeWavHeader(pcm, target, 44100, 2, 16)
-                if (target.name.endsWith(".mp3", ignoreCase = true)) {
-                    AudioFormatHelper.attachMp3Metadata(target, target.nameWithoutExtension)
+                try {
+                    when (targetFormat) {
+                        "WAV" -> AudioFormatHelper.writeWavHeader(pcm, target, 44100, 2, 16)
+                        "M4A" -> AudioFormatHelper.encodePcmToM4a(pcm, target, 44100, 2)
+                        else -> {
+                            AudioFormatHelper.encodePcmToMp3(pcm, target, 44100, 2)
+                            AudioFormatHelper.attachMp3Metadata(target, target.nameWithoutExtension)
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    if (target.exists()) target.delete()
+                    _recorderState.value = _recorderState.value.copy(
+                        status = RecordingStatus.ERROR,
+                        errorMessage = "Gagal mengenkode audio ke $targetFormat: ${e.message}"
+                    )
+                } finally {
+                    pcm.delete()
+                    tempPcmFile = null
                 }
-                pcm.delete()
             }
         }
 
@@ -398,16 +427,42 @@ class AudioRecordManager(private val context: Context) {
             mediaRecorder = null
         }
 
-        val completedFile = targetOutputFile
-        if (completedFile != null && completedFile.exists() && completedFile.name.endsWith(".mp3", ignoreCase = true)) {
-            AudioFormatHelper.attachMp3Metadata(completedFile, completedFile.nameWithoutExtension)
+        // Convert temporary M4A microphone capture when target format is MP3 or WAV
+        val micM4a = tempMicM4aFile
+        val target = targetOutputFile
+        if (!wasInternal && hadMediaRecorder && micM4a != null && micM4a.exists() && target != null) {
+            val decodedPcm = File(context.cacheDir, "temp_mic_pcm_${System.currentTimeMillis()}.pcm")
+            try {
+                val (sampleRate, channels) = AudioFormatHelper.decodeAudioToPcm(micM4a, decodedPcm)
+                when (targetFormat) {
+                    "WAV" -> AudioFormatHelper.writeWavHeader(decodedPcm, target, sampleRate, channels, 16)
+                    else -> {
+                        AudioFormatHelper.encodePcmToMp3(decodedPcm, target, sampleRate, channels)
+                        AudioFormatHelper.attachMp3Metadata(target, target.nameWithoutExtension)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                if (target.exists()) target.delete()
+                _recorderState.value = _recorderState.value.copy(
+                    status = RecordingStatus.ERROR,
+                    errorMessage = "Gagal mengonversi rekaman mikrofon ke $targetFormat: ${e.message}"
+                )
+            } finally {
+                micM4a.delete()
+                decodedPcm.delete()
+                tempMicM4aFile = null
+            }
         }
 
-        _recorderState.value = _recorderState.value.copy(
-            status = RecordingStatus.FINISHED,
-            durationMs = finalDurationMs,
-            amplitude = 0f
-        )
+        val completedFile = targetOutputFile?.takeIf { it.exists() && it.length() > 0L }
+        if (_recorderState.value.status != RecordingStatus.ERROR) {
+            _recorderState.value = _recorderState.value.copy(
+                status = RecordingStatus.FINISHED,
+                durationMs = finalDurationMs,
+                amplitude = 0f
+            )
+        }
 
         completedFile
     }
@@ -446,6 +501,11 @@ class AudioRecordManager(private val context: Context) {
             // ignore
         } finally {
             mediaRecorder = null
+        }
+
+        // Delete temporary mic file if partially written
+        tempMicM4aFile?.let {
+            if (it.exists()) it.delete()
         }
 
         // Delete target output file if partially written
@@ -487,5 +547,6 @@ class AudioRecordManager(private val context: Context) {
         _recorderState.value = RecorderState()
         targetOutputFile = null
         tempPcmFile = null
+        tempMicM4aFile = null
     }
 }

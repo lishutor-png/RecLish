@@ -18,4 +18,18 @@ class ExampleRobolectricTest {
     val appName = context.getString(R.string.app_name)
     assertEquals("RecLish", appName)
   }
+
+  @Test
+  fun `recording file extension and mime type match format`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = com.example.data.RecordingRepository(context)
+
+    assertEquals("audio/mpeg", repo.mimeTypeForFormat("MP3"))
+    assertEquals("audio/wav", repo.mimeTypeForFormat("WAV"))
+    assertEquals("audio/mp4", repo.mimeTypeForFormat("M4A"))
+
+    assertEquals("mp3", repo.createNewRecordingFile("MP3").extension)
+    assertEquals("wav", repo.createNewRecordingFile("WAV").extension)
+    assertEquals("m4a", repo.createNewRecordingFile("M4A").extension)
+  }
 }

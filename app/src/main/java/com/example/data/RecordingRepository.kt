@@ -51,6 +51,12 @@ class RecordingRepository(private val context: Context) {
         return fallback
     }
 
+    fun mimeTypeForFormat(format: String): String = when (format.uppercase()) {
+        "WAV" -> "audio/wav"
+        "M4A" -> "audio/mp4"
+        else -> "audio/mpeg"
+    }
+
     /**
      * Creates a new destination file for an upcoming recording.
      */
@@ -86,12 +92,7 @@ class RecordingRepository(private val context: Context) {
                 put(MediaStore.Audio.Media.TITLE, title)
                 put(MediaStore.Audio.Media.DURATION, durationMs)
                 put(MediaStore.Audio.Media.SIZE, sizeBytes)
-                val mimeType = when (format.uppercase()) {
-                    "WAV" -> "audio/wav"
-                    "M4A" -> "audio/mp4"
-                    else -> "audio/mpeg"
-                }
-                put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
+                put(MediaStore.Audio.Media.MIME_TYPE, mimeTypeForFormat(format))
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/BrowserRecordings")
                     put(MediaStore.Audio.Media.IS_PENDING, 0)
@@ -198,13 +199,8 @@ class RecordingRepository(private val context: Context) {
             "${context.packageName}.fileprovider",
             file
         )
-        val mimeType = when (recording.format.uppercase()) {
-            "WAV" -> "audio/wav"
-            "M4A" -> "audio/mp4"
-            else -> "audio/mpeg"
-        }
         return Intent(Intent.ACTION_SEND).apply {
-            type = mimeType
+            type = mimeTypeForFormat(recording.format)
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, recording.title)
             putExtra(Intent.EXTRA_TEXT, "Rekaman audio dari browser: ${recording.title}")
@@ -219,7 +215,7 @@ class RecordingRepository(private val context: Context) {
 
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, srcFile.name)
-                put(MediaStore.Downloads.MIME_TYPE, if (recording.format == "WAV") "audio/wav" else "audio/mpeg")
+                put(MediaStore.Downloads.MIME_TYPE, mimeTypeForFormat(recording.format))
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                 }
